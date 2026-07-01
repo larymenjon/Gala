@@ -1,16 +1,23 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, setPersistence, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyCsIu-LDgCtcKF2ZrIhrKFp8MB00zTvf4Q',
-  authDomain: 'gala-6a890.firebaseapp.com',
-  projectId: 'gala-6a890',
-  storageBucket: 'gala-6a890.firebasestorage.app',
-  messagingSenderId: '64554543965',
-  appId: '1:64554543965:web:fbd295a9e830209e1d96b4',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
 
-void setPersistence(auth, browserLocalPersistence);
+let auth: Auth | null = null;
+
+if (isFirebaseConfigured) {
+  const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  void setPersistence(auth, browserLocalPersistence);
+}
+
+export { auth };

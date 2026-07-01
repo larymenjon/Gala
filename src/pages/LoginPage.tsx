@@ -10,7 +10,7 @@ import { Globe, LockKeyhole } from 'lucide-react';
 export default function LoginPage() {
   const { login, loginWithGoogle, createGoogleAccount, loading } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('admin@evento.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [googleMode, setGoogleMode] = useState<'login' | 'create'>('login');
@@ -47,7 +47,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-7 shadow-card space-y-4">
           <Field label="E-mail">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required placeholder="Seu e-mail" />
           </Field>
           <Field label="Senha">
             <Input
@@ -93,7 +93,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-cream/25 text-xs mt-6">
-          O Google cria ou acessa sua conta automaticamente. O e-mail e senha continuam disponíveis para a conta local de demonstração.
+          Use Google para criar ou acessar sua conta com segurança.
         </p>
       </div>
     </div>

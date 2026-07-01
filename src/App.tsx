@@ -1,6 +1,7 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import EventsPage from './pages/EventsPage';
 import EventDetailPage from './pages/EventDetailPage';
@@ -12,8 +13,9 @@ import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/r/:slug" element={<PublicRsvpPage />} />
         <Route path="/admin/login" element={<LoginPage />} />
         <Route path="/admin" element={<Navigate to="/admin/inicio" replace />} />
@@ -24,8 +26,8 @@ export default function App() {
         <Route path="/admin/conta" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
         <Route path="/admin/configuracoes" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/admin/eventos/:id" element={<ProtectedRoute><EventDetailPage /></ProtectedRoute>} />
-        <Route path="*" element={<Navigate to="/admin/inicio" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

@@ -12,5 +12,6 @@ export function generateSlug(): string {
 }
 
 export function publicRsvpUrl(slug: string): string {
-  return `${window.location.origin}/r/${slug}`;
+  const base = import.meta.env.BASE_URL || '/';
+  return `${window.location.origin}${base}#/r/${slug}`;
 }

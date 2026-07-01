@@ -11,54 +11,8 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { auth } from './firebase';
-import { localDb } from './storage';
+import { auth, isFirebaseConfigured } from './firebase';
 import type { AccountFormValues, AdminUser } from '../types';
-
-const ACCOUNT_KEY = 'admin_account';
-const SESSION_KEY = 'admin_session';
-
-const DEFAULT_ACCOUNT = {
-  name: 'Admin Gala',
-  email: 'admin@evento.com',
-  password: 'admin123',
-  createdAt: new Date('2026-01-01T12:00:00.000Z').toISOString(),
-  photoUrl: '',
-  plan: {
-    name: 'Plano Pro',
-    status: 'Ativo' as const,
-    renewAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30).toISOString(),
-  },
-};
-
-function ensureLocalAccount() {
-  const existing = localDb.read<(typeof DEFAULT_ACCOUNT) | null>(ACCOUNT_KEY, null);
-  if (!existing) {
-    localDb.write(ACCOUNT_KEY, DEFAULT_ACCOUNT);
-    return DEFAULT_ACCOUNT;
-  }
-  return existing;
-}
-
-function readLocalAccount(): typeof DEFAULT_ACCOUNT {
-  return ensureLocalAccount();
-}
-
-function writeLocalAccount(account: typeof DEFAULT_ACCOUNT) {
-  localDb.write(ACCOUNT_KEY, account);
-}
-
-function clearLocalSession() {
-  localStorage.removeItem(`rsvp_system_v1:${SESSION_KEY}`);
-}
-
-function writeLocalSession(user: AdminUser) {
-  localDb.write(SESSION_KEY, user);
-}
-
-function readLocalSession(): AdminUser | null {
-  return localDb.read<AdminUser | null>(SESSION_KEY, null);
-}
 
 function firebaseUserToAdminUser(user: User): AdminUser {
   const providerId = user.providerData.find((p) => p.providerId === 'google.com' || p.providerId === 'password')?.providerId;
@@ -82,65 +36,41 @@ function firebaseUserToAdminUser(user: User): AdminUser {
   };
 }
 
-function localAccountToAdminUser(account: typeof DEFAULT_ACCOUNT): AdminUser {
-  return {
-    name: account.name,
-    email: account.email,
-    createdAt: account.createdAt,
-    photoUrl: account.photoUrl || undefined,
-    authProvider: 'local',
-    plan: account.plan,
-  };
-}
-
-async function syncLocalShadowFromFirebaseUser(user: User | null) {
-  if (!user) {
-    clearLocalSession();
-    return;
-  }
-  writeLocalSession(firebaseUserToAdminUser(user));
+function unavailableError() {
+  return { ok: false, error: 'Autenticação Firebase não configurada neste ambiente.' };
 }
 
 export function getCurrentUser(): AdminUser | null {
-  const firebaseUser = auth.currentUser;
-  if (firebaseUser) return firebaseUserToAdminUser(firebaseUser);
-  return readLocalSession();
+  if (!isFirebaseConfigured || !auth?.currentUser) return null;
+  return firebaseUserToAdminUser(auth.currentUser);
 }
 
 export function subscribeAuthState(callback: (user: AdminUser | null) => void) {
-  return onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      const mapped = firebaseUserToAdminUser(user);
-      writeLocalSession(mapped);
-      callback(mapped);
-      return;
-    }
-    callback(readLocalSession() ?? null);
+  if (!isFirebaseConfigured || !auth) {
+    callback(null);
+    return () => undefined;
+  }
+  return onAuthStateChanged(auth, (user) => {
+    callback(user ? firebaseUserToAdminUser(user) : null);
   });
 }
 
 export async function login(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
-  const normalized = email.trim().toLowerCase();
+  if (!isFirebaseConfigured || !auth) return unavailableError();
   try {
-    const credential = await signInWithEmailAndPassword(auth, normalized, password);
-    await syncLocalShadowFromFirebaseUser(credential.user);
+    await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
     return { ok: true };
-  } catch {
-    const account = readLocalAccount();
-    if (normalized === account.email && password === account.password) {
-      const localUser = localAccountToAdminUser(account);
-      writeLocalSession(localUser);
-      return { ok: true };
-    }
-    return { ok: false, error: 'E-mail ou senha incorretos.' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'E-mail ou senha incorretos.';
+    return { ok: false, error: message };
   }
 }
 
 export async function loginWithGoogle(): Promise<{ ok: boolean; error?: string }> {
+  if (!isFirebaseConfigured || !auth) return unavailableError();
   try {
     const provider = new GoogleAuthProvider();
-    const credential = await signInWithPopup(auth, provider);
-    await syncLocalShadowFromFirebaseUser(credential.user);
+    await signInWithPopup(auth, provider);
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Não foi possível entrar com Google.';
@@ -153,104 +83,66 @@ export async function createAccountWithGoogle(): Promise<{ ok: boolean; error?: 
 }
 
 export function logout(): void {
-  void signOut(auth);
-  clearLocalSession();
+  if (isFirebaseConfigured && auth) void signOut(auth);
 }
 
 export async function updateAccount(patch: Partial<AccountFormValues>): Promise<{ ok: boolean; error?: string; user?: AdminUser }> {
-  const firebaseUser = auth.currentUser;
-  const localAccount = readLocalAccount();
+  if (!isFirebaseConfigured || !auth?.currentUser) return { ok: false, error: 'Você precisa estar autenticado para atualizar a conta.' };
 
-  if (firebaseUser) {
-    try {
-      const nextName = patch.name?.trim();
-      const nextPhotoUrl = patch.photoUrl;
-      const nextEmail = patch.email?.trim();
-      const nextPassword = patch.password?.trim();
+  try {
+    const nextName = patch.name?.trim();
+    const nextPhotoUrl = patch.photoUrl;
+    const nextEmail = patch.email?.trim();
+    const nextPassword = patch.password?.trim();
 
-      if (nextName) {
-        await updateProfile(firebaseUser, { displayName: nextName });
-      }
-      if (nextPhotoUrl !== undefined) {
-        await updateProfile(firebaseUser, { photoURL: nextPhotoUrl });
-      }
-      if (nextEmail && nextEmail.toLowerCase() !== (firebaseUser.email ?? '').toLowerCase()) {
-        await updateEmail(firebaseUser, nextEmail);
-      }
-      if (nextPassword) {
-        await updatePassword(firebaseUser, nextPassword);
-      }
-      const refreshedUser = auth.currentUser;
-      if (!refreshedUser) return { ok: false, error: 'Não foi possível atualizar a conta.' };
-      const mapped = firebaseUserToAdminUser(refreshedUser);
-      writeLocalSession(mapped);
-      return { ok: true, user: mapped };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível atualizar a conta.';
-      return { ok: false, error: message };
+    if (nextName) {
+      await updateProfile(auth.currentUser, { displayName: nextName });
     }
+    if (nextPhotoUrl !== undefined) {
+      await updateProfile(auth.currentUser, { photoURL: nextPhotoUrl });
+    }
+    if (nextEmail && nextEmail.toLowerCase() !== (auth.currentUser.email ?? '').toLowerCase()) {
+      await updateEmail(auth.currentUser, nextEmail);
+    }
+    if (nextPassword) {
+      await updatePassword(auth.currentUser, nextPassword);
+    }
+
+    const refreshedUser = auth.currentUser;
+    return { ok: true, user: firebaseUserToAdminUser(refreshedUser) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Não foi possível atualizar a conta.';
+    return { ok: false, error: message };
   }
-
-  const nextPassword = patch.password?.trim() || localAccount.password;
-  const nextEmail = patch.email?.trim().toLowerCase() || localAccount.email;
-  const nextName = patch.name?.trim() || localAccount.name;
-
-  if (!nextEmail) return { ok: false, error: 'Informe um e-mail válido.' };
-  if (nextPassword.length < 6) return { ok: false, error: 'A senha precisa ter ao menos 6 caracteres.' };
-
-  const nextAccount = {
-    ...localAccount,
-    name: nextName,
-    email: nextEmail,
-    password: nextPassword,
-    photoUrl: patch.photoUrl ?? localAccount.photoUrl,
-  };
-
-  writeLocalAccount(nextAccount);
-  const user = localAccountToAdminUser(nextAccount);
-  writeLocalSession(user);
-  return { ok: true, user };
 }
 
 export async function updateProfilePhoto(photoUrl: string): Promise<{ ok: boolean; error?: string; user?: AdminUser }> {
-  const firebaseUser = auth.currentUser;
-  const localAccount = readLocalAccount();
+  if (!isFirebaseConfigured || !auth?.currentUser) return { ok: false, error: 'Você precisa estar autenticado para alterar a foto.' };
 
-  if (firebaseUser) {
-    try {
-      await updateProfile(firebaseUser, { photoURL: photoUrl });
-      const refreshedUser = auth.currentUser;
-      if (!refreshedUser) return { ok: false, error: 'Não foi possível atualizar a foto.' };
-      const mapped = firebaseUserToAdminUser(refreshedUser);
-      writeLocalSession(mapped);
-      return { ok: true, user: mapped };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível atualizar a foto.';
-      return { ok: false, error: message };
-    }
+  try {
+    await updateProfile(auth.currentUser, { photoURL: photoUrl });
+    return { ok: true, user: firebaseUserToAdminUser(auth.currentUser) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Não foi possível atualizar a foto.';
+    return { ok: false, error: message };
   }
-
-  const nextAccount = { ...localAccount, photoUrl };
-  writeLocalAccount(nextAccount);
-  const user = localAccountToAdminUser(nextAccount);
-  writeLocalSession(user);
-  return { ok: true, user };
 }
 
 export async function deleteAccount(): Promise<{ ok: boolean; error?: string }> {
+  if (!isFirebaseConfigured || !auth?.currentUser) {
+    return { ok: false, error: 'Você precisa estar autenticado para excluir a conta.' };
+  }
+
   try {
-    if (auth.currentUser) {
-      await deleteUser(auth.currentUser);
-    }
-    localStorage.removeItem(`rsvp_system_v1:${ACCOUNT_KEY}`);
-    clearLocalSession();
+    await deleteUser(auth.currentUser);
     return { ok: true };
   } catch {
-    return { ok: false, error: 'O Firebase exige reautenticação para excluir esta conta. Tente entrar novamente e remover outra vez.' };
+    return { ok: false, error: 'O Firebase exige reautenticação para excluir esta conta. Entre novamente e tente de novo.' };
   }
 }
 
 export async function sendPasswordReset(email: string): Promise<{ ok: boolean; error?: string }> {
+  if (!isFirebaseConfigured || !auth) return unavailableError();
   try {
     await sendPasswordResetEmail(auth, email.trim().toLowerCase());
     return { ok: true };
@@ -260,8 +152,7 @@ export async function sendPasswordReset(email: string): Promise<{ ok: boolean; e
   }
 }
 
-export function getAccountData(): AdminUser {
-  const firebaseUser = auth.currentUser;
-  if (firebaseUser) return firebaseUserToAdminUser(firebaseUser);
-  return readLocalSession() ?? localAccountToAdminUser(readLocalAccount());
+export function getAccountData(): AdminUser | null {
+  if (!isFirebaseConfigured || !auth?.currentUser) return null;
+  return firebaseUserToAdminUser(auth.currentUser);
 }

@@ -15,10 +15,12 @@ export default function BrandMark({
   showLabel = true,
   size = 56,
 }: BrandMarkProps) {
+  const iconSrc = `${import.meta.env.BASE_URL}Iconpage.svg`;
+
   return (
     <div className={`inline-flex items-center gap-4 ${className}`.trim()}>
       <img
-        src="/gala-mark.svg"
+        src={iconSrc}
         alt=""
         aria-hidden="true"
         width={size}

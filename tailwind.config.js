@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['"Fraunces"', 'serif'],
-        body: ['"Inter"', 'sans-serif'],
+        display: ['"Cormorant Garamond"', 'serif'],
+        body: ['"Manrope"', '"Inter"', 'sans-serif'],
       },
       colors: {
         ink: {

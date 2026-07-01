@@ -11,6 +11,7 @@ import {
   updateAccount as updateAccountService,
   updateProfilePhoto as updateProfilePhotoService,
 } from '../services/authService';
+import { isFirebaseConfigured } from '../services/firebase';
 import type { AccountFormValues, AdminUser } from '../types';
 
 export function useAuth() {
@@ -19,6 +20,11 @@ export function useAuth() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
+    if (!isFirebaseConfigured) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     const unsubscribe = subscribeAuthState((nextUser) => {
       setUser(nextUser);
       setLoading(false);

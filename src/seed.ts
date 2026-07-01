@@ -31,12 +31,12 @@ export function seedDemoData() {
   };
 
   const guestsRaw: Omit<Guest, 'id' | 'slug' | 'createdAt'>[] = [
-    { eventId, responsibleName: 'Maria Souza', phone: '(11) 91234-5678', expectedPeople: 2, confirmedPeople: 2, status: 'confirmado', respondedAt: now },
-    { eventId, responsibleName: 'João Lima', phone: '(11) 98765-4321', expectedPeople: 4, confirmedPeople: 3, status: 'confirmado', respondedAt: now },
-    { eventId, responsibleName: 'Carla Mendes', phone: '(21) 99001-2345', expectedPeople: 2, confirmedPeople: 0, status: 'recusado', respondedAt: now },
-    { eventId, responsibleName: 'Roberto Alves', phone: '(11) 93456-7890', expectedPeople: 3, confirmedPeople: 0, status: 'pendente' },
-    { eventId, responsibleName: 'Fernanda Costa', phone: '(31) 92222-3333', expectedPeople: 2, confirmedPeople: 0, status: 'pendente' },
-    { eventId, responsibleName: 'Lucas Pereira', phone: '(11) 91111-2222', expectedPeople: 1, confirmedPeople: 1, status: 'confirmado', respondedAt: now },
+    { eventId, responsibleName: 'Convidado Demo 1', phone: '(11) 90000-0001', expectedPeople: 2, confirmedPeople: 2, status: 'confirmado', respondedAt: now },
+    { eventId, responsibleName: 'Convidado Demo 2', phone: '(11) 90000-0002', expectedPeople: 4, confirmedPeople: 3, status: 'confirmado', respondedAt: now },
+    { eventId, responsibleName: 'Convidado Demo 3', phone: '(21) 90000-0003', expectedPeople: 2, confirmedPeople: 0, status: 'recusado', respondedAt: now },
+    { eventId, responsibleName: 'Convidado Demo 4', phone: '(11) 90000-0004', expectedPeople: 3, confirmedPeople: 0, status: 'pendente' },
+    { eventId, responsibleName: 'Convidado Demo 5', phone: '(31) 90000-0005', expectedPeople: 2, confirmedPeople: 0, status: 'pendente' },
+    { eventId, responsibleName: 'Convidado Demo 6', phone: '(11) 90000-0006', expectedPeople: 1, confirmedPeople: 1, status: 'confirmado', respondedAt: now },
   ];
 
   const guests: Guest[] = guestsRaw.map((g, i) => ({
