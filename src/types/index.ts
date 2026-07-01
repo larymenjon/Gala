@@ -18,6 +18,12 @@ export interface EventItem {
   location: string;
   description: string;
   welcomeMessage: string;
+  invitationStyle?: 'editorial' | 'modern' | 'romantic' | 'classic';
+  invitationHeadline?: string;
+  invitationSubtitle?: string;
+  invitationNote?: string;
+  primaryActionLabel?: string;
+  secondaryActionLabel?: string;
   maxGuestsTotal?: number; // optional overall cap for the event
   coverIcon?: EventCoverIcon;
   createdAt: string;
