@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CalendarDays, Clock3, MailX, MapPin, SearchX, PartyPopper, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, Clock3, MailX, MapPin, SearchX, PartyPopper } from 'lucide-react';
 import type { EventItem, Guest } from '../types';
 import * as guestService from '../services/guestService';
 import * as eventService from '../services/eventService';
