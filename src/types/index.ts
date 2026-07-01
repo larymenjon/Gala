@@ -51,6 +51,7 @@ export interface AdminUser {
   email: string;
   createdAt: string;
   photoUrl?: string;
+  authProvider?: 'google' | 'password' | 'local';
   plan?: {
     name: string;
     status: 'Ativo' | 'Pausado' | 'Expirado';

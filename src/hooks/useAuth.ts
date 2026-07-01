@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  createAccountWithGoogle,
   deleteAccount as deleteAccountService,
   getCurrentUser,
   login as loginService,
+  loginWithGoogle,
   logout as logoutService,
+  sendPasswordReset,
+  subscribeAuthState,
   updateAccount as updateAccountService,
   updateProfilePhoto as updateProfilePhotoService,
 } from '../services/authService';
@@ -11,16 +15,37 @@ import type { AccountFormValues, AdminUser } from '../types';
 
 export function useAuth() {
   const [user, setUser] = useState<AdminUser | null>(getCurrentUser());
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    setUser(getCurrentUser());
+    const unsubscribe = subscribeAuthState((nextUser) => {
+      setUser(nextUser);
+      setLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    setLoading(true);
+    setActionLoading(true);
     const result = await loginService(email, password);
-    setLoading(false);
+    setActionLoading(false);
+    if (result.ok) setUser(getCurrentUser());
+    return result;
+  }, []);
+
+  const loginWithGoogleAccount = useCallback(async () => {
+    setActionLoading(true);
+    const result = await loginWithGoogle();
+    setActionLoading(false);
+    if (result.ok) setUser(getCurrentUser());
+    return result;
+  }, []);
+
+  const createGoogleAccount = useCallback(async () => {
+    setActionLoading(true);
+    const result = await createAccountWithGoogle();
+    setActionLoading(false);
     if (result.ok) setUser(getCurrentUser());
     return result;
   }, []);
@@ -43,14 +68,22 @@ export function useAuth() {
   }, []);
 
   const deleteAccount = useCallback(async () => {
-    await deleteAccountService();
-    setUser(null);
+    const result = await deleteAccountService();
+    if (result.ok) setUser(null);
+    return result;
+  }, []);
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    return sendPasswordReset(email);
   }, []);
 
   return {
     user,
-    loading,
+    loading: loading || actionLoading,
     login,
+    loginWithGoogle: loginWithGoogleAccount,
+    createGoogleAccount,
+    requestPasswordReset,
     logout,
     updateAccount,
     updateProfilePhoto,

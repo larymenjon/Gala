@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, Loader2, Upload } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Button from '../components/Button';
-import { Field, Input } from '../components/FormFields';
+import { Field } from '../components/FormFields';
 import { useEvents } from '../hooks/useEvents';
 import * as importService from '../services/importService';
 import * as guestService from '../services/guestService';

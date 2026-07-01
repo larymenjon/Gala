@@ -5,14 +5,15 @@ import { useAuth } from '../hooks/useAuth';
 import { Field, Input } from '../components/FormFields';
 import Button from '../components/Button';
 import BrandMark from '../components/BrandMark';
-import { LockKeyhole } from 'lucide-react';
+import { Globe, LockKeyhole } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, loading } = useAuth();
+  const { login, loginWithGoogle, createGoogleAccount, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('admin@evento.com');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [googleMode, setGoogleMode] = useState<'login' | 'create'>('login');
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -20,6 +21,13 @@ export default function LoginPage() {
     const result = await login(email, password);
     if (result.ok) navigate('/admin/inicio');
     else setError(result.error ?? 'Erro ao entrar.');
+  }
+
+  async function handleGoogleAccess() {
+    setError('');
+    const result = googleMode === 'create' ? await createGoogleAccount() : await loginWithGoogle();
+    if (result.ok) navigate('/admin/inicio');
+    else setError(result.error ?? 'Não foi possível acessar com o Google.');
   }
 
   return (
@@ -55,10 +63,37 @@ export default function LoginPage() {
           <Button type="submit" className="w-full justify-center" icon={<LockKeyhole className="h-4 w-4" />} disabled={loading}>
             {loading ? 'Entrando...' : 'Entrar'}
           </Button>
+
+          <div className="relative py-2">
+            <div className="h-px bg-ink/10" />
+            <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 mx-auto w-fit bg-white px-3 text-[10px] uppercase tracking-[0.3em] text-ink/35">
+              ou
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full justify-center"
+              icon={<Globe className="h-4 w-4" />}
+              onClick={handleGoogleAccess}
+              disabled={loading}
+            >
+              {googleMode === 'create' ? 'Criar conta com Google' : 'Continuar com Google'}
+            </Button>
+            <button
+              type="button"
+              onClick={() => setGoogleMode((mode) => (mode === 'login' ? 'create' : 'login'))}
+              className="w-full text-center text-xs text-ink/45 hover:text-ink/70 transition-colors"
+            >
+              {googleMode === 'create' ? 'Já tenho conta Google' : 'Quero criar conta com Google'}
+            </button>
+          </div>
         </form>
 
         <p className="text-center text-cream/25 text-xs mt-6">
-          Credenciais padrão: admin@evento.com / admin123
+          O Google cria ou acessa sua conta automaticamente. O e-mail e senha continuam disponíveis para a conta local de demonstração.
         </p>
       </div>
     </div>

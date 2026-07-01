@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Camera, Crown, LogOut, ShieldAlert, Trash2, UserRound } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import Button from '../components/Button';
@@ -16,6 +16,11 @@ export default function AccountPage() {
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setName(user?.name ?? '');
+    setEmail(user?.email ?? '');
+  }, [user?.name, user?.email]);
 
   async function handleSave() {
     setMessage('');
@@ -45,7 +50,11 @@ export default function AccountPage() {
   }
 
   async function handleDeleteAccount() {
-    await deleteAccount();
+    const result = await deleteAccount();
+    if (!result.ok) {
+      setError(result.error ?? 'Não foi possível excluir a conta.');
+      return;
+    }
     logout();
   }
 
@@ -81,6 +90,7 @@ export default function AccountPage() {
           <div className="rounded-2xl border border-ink/8 bg-white p-5 shadow-soft space-y-3 text-sm text-ink/65">
             <p className="flex items-center gap-2"><Crown className="h-4 w-4 text-gold-dark" /> Plano: <strong className="text-ink">{user?.plan?.name ?? 'Sem plano'}</strong></p>
             <p>Status: <strong className="text-ink">{user?.plan?.status ?? 'Sem informação'}</strong></p>
+            <p>Autenticação: <strong className="text-ink">{user?.authProvider === 'google' ? 'Google' : user?.authProvider === 'password' ? 'E-mail e senha' : 'Local'}</strong></p>
             <p>Conta criada em: <strong className="text-ink">{user?.createdAt ? formatDateShort(user.createdAt.slice(0, 10)) : '---'}</strong></p>
             {user?.plan?.renewAt && <p>Renovação: <strong className="text-ink">{formatDateShort(user.plan.renewAt.slice(0, 10))}</strong></p>}
           </div>
@@ -106,7 +116,7 @@ export default function AccountPage() {
           </Field>
 
           <Field label="Nova senha" hint="Deixe em branco para manter a senha atual.">
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Digite uma nova senha" />
           </Field>
 
           {message && <p className="rounded-xl bg-sage/10 px-4 py-3 text-sm text-[#4F6650]">{message}</p>}
