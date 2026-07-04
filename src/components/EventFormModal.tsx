@@ -58,6 +58,7 @@ export default function EventFormModal({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -90,6 +91,7 @@ export default function EventFormModal({
       coverIcon: initial?.coverIcon ?? 'sparkles',
     });
     setErrors({});
+    setSubmitError('');
   }, [open, initial]);
 
   function validate() {
@@ -106,6 +108,7 @@ export default function EventFormModal({
   async function handleSubmit() {
     if (!validate()) return;
     setSaving(true);
+    setSubmitError('');
     try {
       await onSubmit({
         name: form.name.trim(),
@@ -132,6 +135,9 @@ export default function EventFormModal({
         coverIcon: form.coverIcon,
       });
       onClose();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível salvar o convite.';
+      setSubmitError(message);
     } finally {
       setSaving(false);
     }
@@ -357,6 +363,11 @@ export default function EventFormModal({
             <Button variant="ghost" onClick={onClose}>Cancelar</Button>
             <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Salvando...' : 'Salvar convite'}</Button>
           </div>
+          {submitError && (
+            <p className="rounded-xl border border-rose/20 bg-rose/10 px-4 py-3 text-sm text-rose">
+              {submitError}
+            </p>
+          )}
         </div>
 
         <div className="lg:sticky lg:top-0">

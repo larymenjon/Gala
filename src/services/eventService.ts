@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
 import type { EventItem } from '../types';
 import { db } from './firebase';
 import { localDb } from './storage';
@@ -11,6 +11,10 @@ function getLocalEvents(): EventItem[] {
 
 function saveLocalEvents(events: EventItem[]): void {
   localDb.write(KEY, events);
+}
+
+function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
 
 function mapEventData(id: string, data: Record<string, unknown>): EventItem {
@@ -48,9 +52,13 @@ export async function listEvents(): Promise<EventItem[]> {
     return localDb.delay(events);
   }
 
-  const snapshot = await getDocs(query(collection(db, KEY), orderBy('createdAt', 'desc')));
-  const events = snapshot.docs.map((snap) => mapEventData(snap.id, snap.data()));
-  return events;
+  try {
+    const snapshot = await getDocs(query(collection(db, KEY), orderBy('createdAt', 'desc')));
+    return snapshot.docs.map((snap) => mapEventData(snap.id, snap.data()));
+  } catch {
+    const events = getLocalEvents().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(events);
+  }
 }
 
 export async function getEvent(id: string): Promise<EventItem | undefined> {
@@ -59,9 +67,14 @@ export async function getEvent(id: string): Promise<EventItem | undefined> {
     return localDb.delay(event);
   }
 
-  const snapshot = await getDoc(doc(db, KEY, id));
-  if (!snapshot.exists()) return undefined;
-  return mapEventData(snapshot.id, snapshot.data());
+  try {
+    const snapshot = await getDoc(doc(db, KEY, id));
+    if (!snapshot.exists()) return undefined;
+    return mapEventData(snapshot.id, snapshot.data());
+  } catch {
+    const event = getLocalEvents().find((e) => e.id === id);
+    return localDb.delay(event);
+  }
 }
 
 export async function createEvent(input: Omit<EventItem, 'id' | 'createdAt'>): Promise<EventItem> {
@@ -78,11 +91,18 @@ export async function createEvent(input: Omit<EventItem, 'id' | 'createdAt'>): P
     return localDb.delay(event);
   }
 
-  await setDoc(doc(db, KEY, event.id), {
-    ...input,
-    createdAt: event.createdAt,
-  });
-  return event;
+  try {
+    await setDoc(doc(db, KEY, event.id), stripUndefined({
+      ...input,
+      createdAt: event.createdAt,
+    }));
+    return event;
+  } catch {
+    const events = getLocalEvents();
+    events.push(event);
+    saveLocalEvents(events);
+    return localDb.delay(event);
+  }
 }
 
 export async function updateEvent(id: string, patch: Partial<Omit<EventItem, 'id' | 'createdAt'>>): Promise<EventItem | undefined> {
@@ -96,13 +116,25 @@ export async function updateEvent(id: string, patch: Partial<Omit<EventItem, 'id
   }
 
   const ref = doc(db, KEY, id);
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) return undefined;
+  try {
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) return undefined;
 
-  await updateDoc(ref, patch);
-  const updated = await getDoc(ref);
-  if (!updated.exists()) return undefined;
-  return mapEventData(updated.id, updated.data());
+    const normalizedPatch = Object.fromEntries(
+      Object.entries(patch).map(([key, value]) => [key, value === undefined ? deleteField() : value]),
+    );
+    await updateDoc(ref, normalizedPatch);
+    const updated = await getDoc(ref);
+    if (!updated.exists()) return undefined;
+    return mapEventData(updated.id, updated.data());
+  } catch {
+    const events = getLocalEvents();
+    const idx = events.findIndex((e) => e.id === id);
+    if (idx === -1) return undefined;
+    events[idx] = { ...events[idx], ...patch };
+    saveLocalEvents(events);
+    return localDb.delay(events[idx]);
+  }
 }
 
 export async function deleteEvent(id: string): Promise<void> {
@@ -112,5 +144,11 @@ export async function deleteEvent(id: string): Promise<void> {
     return localDb.delay(undefined);
   }
 
-  await deleteDoc(doc(db, KEY, id));
+  try {
+    await deleteDoc(doc(db, KEY, id));
+  } catch {
+    const events = getLocalEvents().filter((e) => e.id !== id);
+    saveLocalEvents(events);
+    await localDb.delay(undefined);
+  }
 }

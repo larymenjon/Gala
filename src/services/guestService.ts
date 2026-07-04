@@ -67,10 +67,17 @@ export async function listGuestsByEvent(eventId: string): Promise<Guest[]> {
     return localDb.delay(guests);
   }
 
-  const snapshot = await getDocs(query(collection(db, KEY), where('eventId', '==', eventId)));
-  return snapshot.docs
-    .map((snap) => mapGuestData(snap.id, snap.data()))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  try {
+    const snapshot = await getDocs(query(collection(db, KEY), where('eventId', '==', eventId)));
+    return snapshot.docs
+      .map((snap) => mapGuestData(snap.id, snap.data()))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  } catch {
+    const guests = getLocalGuests()
+      .filter((g) => g.eventId === eventId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(guests);
+  }
 }
 
 export async function listAllGuests(): Promise<Guest[]> {
@@ -79,10 +86,15 @@ export async function listAllGuests(): Promise<Guest[]> {
     return localDb.delay(guests);
   }
 
-  const snapshot = await getDocs(collection(db, KEY));
-  return snapshot.docs
-    .map((snap) => mapGuestData(snap.id, snap.data()))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  try {
+    const snapshot = await getDocs(collection(db, KEY));
+    return snapshot.docs
+      .map((snap) => mapGuestData(snap.id, snap.data()))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  } catch {
+    const guests = getLocalGuests().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(guests);
+  }
 }
 
 export async function getGuestBySlug(slug: string): Promise<Guest | undefined> {
@@ -91,10 +103,15 @@ export async function getGuestBySlug(slug: string): Promise<Guest | undefined> {
     return localDb.delay(guest);
   }
 
-  const snapshot = await getDocs(query(collection(db, KEY), where('slug', '==', slug), limit(1)));
-  if (snapshot.empty) return undefined;
-  const snap = snapshot.docs[0];
-  return mapGuestData(snap.id, snap.data());
+  try {
+    const snapshot = await getDocs(query(collection(db, KEY), where('slug', '==', slug), limit(1)));
+    if (snapshot.empty) return undefined;
+    const snap = snapshot.docs[0];
+    return mapGuestData(snap.id, snap.data());
+  } catch {
+    const guest = getLocalGuests().find((g) => g.slug === slug);
+    return localDb.delay(guest);
+  }
 }
 
 export async function createGuest(input: {
@@ -121,28 +138,46 @@ export async function createGuest(input: {
     return localDb.delay(guest);
   }
 
-  const createdAt = new Date().toISOString();
-  let slug = generateSlug();
-  let safety = 0;
-  while ((await slugExists(slug)) && safety < 8) {
-    slug = generateSlug();
-    safety += 1;
+  try {
+    const createdAt = new Date().toISOString();
+    let slug = generateSlug();
+    let safety = 0;
+    while ((await slugExists(slug)) && safety < 8) {
+      slug = generateSlug();
+      safety += 1;
+    }
+
+    const guest: Guest = {
+      id: crypto.randomUUID(),
+      eventId: input.eventId,
+      responsibleName: input.responsibleName.trim(),
+      phone: input.phone.trim(),
+      expectedPeople: Math.max(1, input.expectedPeople),
+      confirmedPeople: 0,
+      status: 'pendente',
+      createdAt,
+      slug,
+    };
+
+    await setDoc(doc(db, KEY, guest.id), guest);
+    return guest;
+  } catch {
+    const guests = getLocalGuests();
+    const guest: Guest = {
+      id: crypto.randomUUID(),
+      eventId: input.eventId,
+      responsibleName: input.responsibleName.trim(),
+      phone: input.phone.trim(),
+      expectedPeople: Math.max(1, input.expectedPeople),
+      confirmedPeople: 0,
+      status: 'pendente',
+      createdAt: new Date().toISOString(),
+      slug: await uniqueSlug(guests),
+    };
+    guests.push(guest);
+    saveLocalGuests(guests);
+    return localDb.delay(guest);
   }
-
-  const guest: Guest = {
-    id: crypto.randomUUID(),
-    eventId: input.eventId,
-    responsibleName: input.responsibleName.trim(),
-    phone: input.phone.trim(),
-    expectedPeople: Math.max(1, input.expectedPeople),
-    confirmedPeople: 0,
-    status: 'pendente',
-    createdAt,
-    slug,
-  };
-
-  await setDoc(doc(db, KEY, guest.id), guest);
-  return guest;
 }
 
 export interface GuestImportRow {
@@ -249,8 +284,43 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
     imported += 1;
   }
 
-  await batch.commit();
-  return { imported, skippedDuplicates, skippedInvalid, total: rows.length };
+  try {
+    await batch.commit();
+    return { imported, skippedDuplicates, skippedInvalid, total: rows.length };
+  } catch {
+    const guests = getLocalGuests();
+    for (const row of rows) {
+      const name = row.responsibleName.trim();
+      const phone = row.phone.trim();
+      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople)));
+      const key = `${normalizeText(name)}|${normalizePhone(phone)}`;
+
+      if (!name || !phone || Number.isNaN(expectedPeople) || expectedPeople < 1) {
+        continue;
+      }
+
+      if (existingKeys.has(key) || batchKeys.has(key)) {
+        continue;
+      }
+
+      batchKeys.add(key);
+      guests.push({
+        id: crypto.randomUUID(),
+        eventId,
+        responsibleName: name,
+        phone,
+        expectedPeople,
+        confirmedPeople: 0,
+        status: 'pendente',
+        createdAt: new Date().toISOString(),
+        slug: await uniqueSlug(guests),
+      });
+      imported += 1;
+    }
+
+    saveLocalGuests(guests);
+    return localDb.delay({ imported, skippedDuplicates, skippedInvalid, total: rows.length });
+  }
 }
 
 export async function updateGuest(id: string, patch: Partial<Pick<Guest, 'responsibleName' | 'phone' | 'expectedPeople'>>): Promise<Guest | undefined> {
@@ -350,13 +420,23 @@ export async function submitResponse(
     return { ok: true, guest: updatedGuest };
   }
 
-  await updateDoc(doc(db, KEY, guest.id), {
-    responsibleName: updatedGuest.responsibleName,
-    confirmedPeople: updatedGuest.confirmedPeople,
-    status: updatedGuest.status,
-    respondedAt: updatedGuest.respondedAt,
-  });
-  return { ok: true, guest: updatedGuest };
+  try {
+    await updateDoc(doc(db, KEY, guest.id), {
+      responsibleName: updatedGuest.responsibleName,
+      confirmedPeople: updatedGuest.confirmedPeople,
+      status: updatedGuest.status,
+      respondedAt: updatedGuest.respondedAt,
+    });
+    return { ok: true, guest: updatedGuest };
+  } catch {
+    const localGuests = getLocalGuests();
+    const idx = localGuests.findIndex((g) => g.slug === slug);
+    if (idx !== -1) {
+      localGuests[idx] = updatedGuest;
+      saveLocalGuests(localGuests);
+    }
+    return { ok: true, guest: updatedGuest };
+  }
 }
 
 export async function getEventMetrics(eventId: string): Promise<EventMetrics> {
