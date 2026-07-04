@@ -11,7 +11,7 @@
  * SQL pronto para Supabase/Postgres.
  */
 
-const NAMESPACE = 'rsvp_system_v1';
+const NAMESPACE = 'gala_system_v1';
 
 function read<T>(key: string, fallback: T): T {
   try {

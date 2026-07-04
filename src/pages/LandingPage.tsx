@@ -205,4 +205,5 @@ function DecorativeBackground() {
       <div className="absolute left-[50%] top-[22%] h-px w-44 -translate-x-1/2 rotate-[-18deg] rounded-full bg-gradient-to-r from-transparent via-gold/35 to-transparent blur-[1px]" />
       <div className="absolute left-[58%] top-[28%] h-px w-56 -translate-x-1/2 rotate-[18deg] rounded-full bg-gradient-to-r from-transparent via-rose/25 to-transparent blur-[1px]" />
     </div>
-  
+  );
+}

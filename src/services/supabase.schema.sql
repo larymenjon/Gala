@@ -1,5 +1,5 @@
 -- =========================================================
--- Schema Supabase/PostgreSQL para o sistema de RSVP
+-- Schema Supabase/PostgreSQL para a plataforma de gestão de eventos
 -- Execute no SQL editor do Supabase (ou via migration)
 -- =========================================================
 
@@ -72,7 +72,7 @@ language sql security definer as $$
   where g.slug = p_slug;
 $$;
 
-create or replace function submit_rsvp(p_slug text, p_responsible_name text, p_confirmed_people integer, p_status text)
+create or replace function submit_guest_response(p_slug text, p_responsible_name text, p_confirmed_people integer, p_status text)
 returns guests
 language plpgsql security definer as $$
 declare

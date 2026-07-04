@@ -1,5 +1,7 @@
+import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 import type { EventMetrics, Guest, GuestStatus } from '../types';
 import { generateSlug } from '../utils/slug';
+import { db } from './firebase';
 import { localDb } from './storage';
 import { getEvent } from './eventService';
 
@@ -18,37 +20,81 @@ function normalizePhone(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-function getAll(): Guest[] {
+function getLocalGuests(): Guest[] {
   return localDb.read<Guest[]>(KEY, []);
 }
 
-function saveAll(guests: Guest[]): void {
+function saveLocalGuests(guests: Guest[]): void {
   localDb.write(KEY, guests);
 }
 
-function uniqueSlug(existing: Guest[]): string {
+function mapGuestData(id: string, data: Record<string, unknown>): Guest {
+  return {
+    id,
+    eventId: String(data.eventId ?? ''),
+    responsibleName: String(data.responsibleName ?? ''),
+    phone: String(data.phone ?? ''),
+    expectedPeople: Number(data.expectedPeople ?? 1),
+    confirmedPeople: Number(data.confirmedPeople ?? 0),
+    status: data.status as GuestStatus,
+    respondedAt: data.respondedAt ? String(data.respondedAt) : undefined,
+    createdAt: String(data.createdAt ?? new Date().toISOString()),
+    slug: String(data.slug ?? ''),
+  };
+}
+
+async function uniqueSlug(existing: Guest[]): Promise<string> {
   let slug = generateSlug();
-  while (existing.some((g) => g.slug === slug)) {
+  let safety = 0;
+  while (existing.some((g) => g.slug === slug) && safety < 8) {
     slug = generateSlug();
+    safety += 1;
   }
   return slug;
 }
 
+async function slugExists(candidate: string): Promise<boolean> {
+  if (!db) return false;
+  const snapshot = await getDocs(query(collection(db, KEY), where('slug', '==', candidate), limit(1)));
+  return !snapshot.empty;
+}
+
 export async function listGuestsByEvent(eventId: string): Promise<Guest[]> {
-  const guests = getAll()
-    .filter((g) => g.eventId === eventId)
+  if (!db) {
+    const guests = getLocalGuests()
+      .filter((g) => g.eventId === eventId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(guests);
+  }
+
+  const snapshot = await getDocs(query(collection(db, KEY), where('eventId', '==', eventId)));
+  return snapshot.docs
+    .map((snap) => mapGuestData(snap.id, snap.data()))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  return localDb.delay(guests);
 }
 
 export async function listAllGuests(): Promise<Guest[]> {
-  const guests = getAll().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  return localDb.delay(guests);
+  if (!db) {
+    const guests = getLocalGuests().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(guests);
+  }
+
+  const snapshot = await getDocs(collection(db, KEY));
+  return snapshot.docs
+    .map((snap) => mapGuestData(snap.id, snap.data()))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function getGuestBySlug(slug: string): Promise<Guest | undefined> {
-  const guest = getAll().find((g) => g.slug === slug);
-  return localDb.delay(guest);
+  if (!db) {
+    const guest = getLocalGuests().find((g) => g.slug === slug);
+    return localDb.delay(guest);
+  }
+
+  const snapshot = await getDocs(query(collection(db, KEY), where('slug', '==', slug), limit(1)));
+  if (snapshot.empty) return undefined;
+  const snap = snapshot.docs[0];
+  return mapGuestData(snap.id, snap.data());
 }
 
 export async function createGuest(input: {
@@ -57,7 +103,32 @@ export async function createGuest(input: {
   phone: string;
   expectedPeople: number;
 }): Promise<Guest> {
-  const guests = getAll();
+  if (!db) {
+    const guests = getLocalGuests();
+    const guest: Guest = {
+      id: crypto.randomUUID(),
+      eventId: input.eventId,
+      responsibleName: input.responsibleName.trim(),
+      phone: input.phone.trim(),
+      expectedPeople: Math.max(1, input.expectedPeople),
+      confirmedPeople: 0,
+      status: 'pendente',
+      createdAt: new Date().toISOString(),
+      slug: await uniqueSlug(guests),
+    };
+    guests.push(guest);
+    saveLocalGuests(guests);
+    return localDb.delay(guest);
+  }
+
+  const createdAt = new Date().toISOString();
+  let slug = generateSlug();
+  let safety = 0;
+  while ((await slugExists(slug)) && safety < 8) {
+    slug = generateSlug();
+    safety += 1;
+  }
+
   const guest: Guest = {
     id: crypto.randomUUID(),
     eventId: input.eventId,
@@ -66,12 +137,12 @@ export async function createGuest(input: {
     expectedPeople: Math.max(1, input.expectedPeople),
     confirmedPeople: 0,
     status: 'pendente',
-    createdAt: new Date().toISOString(),
-    slug: uniqueSlug(guests),
+    createdAt,
+    slug,
   };
-  guests.push(guest);
-  saveAll(guests);
-  return localDb.delay(guest);
+
+  await setDoc(doc(db, KEY, guest.id), guest);
+  return guest;
 }
 
 export interface GuestImportRow {
@@ -88,16 +159,55 @@ export interface GuestImportResult {
 }
 
 export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[]): Promise<GuestImportResult> {
-  const guests = getAll();
-  const existingKeys = new Set(
-    guests
-      .filter((g) => g.eventId === eventId)
-      .map((g) => `${normalizeText(g.responsibleName)}|${normalizePhone(g.phone)}`)
-  );
+  const existingGuests = await listGuestsByEvent(eventId);
+  const existingKeys = new Set(existingGuests.map((g) => `${normalizeText(g.responsibleName)}|${normalizePhone(g.phone)}`));
   const batchKeys = new Set<string>();
   let imported = 0;
   let skippedDuplicates = 0;
   let skippedInvalid = 0;
+
+  if (!db) {
+    const guests = getLocalGuests();
+    for (const row of rows) {
+      const name = row.responsibleName.trim();
+      const phone = row.phone.trim();
+      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople)));
+      const key = `${normalizeText(name)}|${normalizePhone(phone)}`;
+
+      if (!name || !phone || Number.isNaN(expectedPeople) || expectedPeople < 1) {
+        skippedInvalid += 1;
+        continue;
+      }
+
+      if (existingKeys.has(key) || batchKeys.has(key)) {
+        skippedDuplicates += 1;
+        continue;
+      }
+
+      batchKeys.add(key);
+      guests.push({
+        id: crypto.randomUUID(),
+        eventId,
+        responsibleName: name,
+        phone,
+        expectedPeople,
+        confirmedPeople: 0,
+        status: 'pendente',
+        createdAt: new Date().toISOString(),
+        slug: await uniqueSlug(guests),
+      });
+      imported += 1;
+    }
+
+    saveLocalGuests(guests);
+    return localDb.delay({ imported, skippedDuplicates, skippedInvalid, total: rows.length });
+  }
+
+  const batch = writeBatch(db);
+  const guestsCollection = collection(db, KEY);
+  const currentDocs = await getDocs(guestsCollection);
+  const currentGuests = currentDocs.docs.map((snap) => mapGuestData(snap.id, snap.data()));
+  const slugSet = new Set(currentGuests.map((g) => g.slug));
 
   for (const row of rows) {
     const name = row.responsibleName.trim();
@@ -116,8 +226,17 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
     }
 
     batchKeys.add(key);
-    guests.push({
-      id: crypto.randomUUID(),
+    let slug = generateSlug();
+    let safety = 0;
+    while (slugSet.has(slug) && safety < 8) {
+      slug = generateSlug();
+      safety += 1;
+    }
+    slugSet.add(slug);
+
+    const ref = doc(collection(db, KEY));
+    batch.set(ref, {
+      id: ref.id,
       eventId,
       responsibleName: name,
       phone,
@@ -125,54 +244,67 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
       confirmedPeople: 0,
       status: 'pendente',
       createdAt: new Date().toISOString(),
-      slug: uniqueSlug(guests),
+      slug,
     });
     imported += 1;
   }
 
-  saveAll(guests);
-  return localDb.delay({ imported, skippedDuplicates, skippedInvalid, total: rows.length });
+  await batch.commit();
+  return { imported, skippedDuplicates, skippedInvalid, total: rows.length };
 }
 
 export async function updateGuest(id: string, patch: Partial<Pick<Guest, 'responsibleName' | 'phone' | 'expectedPeople'>>): Promise<Guest | undefined> {
-  const guests = getAll();
-  const idx = guests.findIndex((g) => g.id === id);
-  if (idx === -1) return undefined;
-  guests[idx] = { ...guests[idx], ...patch };
-  saveAll(guests);
-  return localDb.delay(guests[idx]);
+  if (!db) {
+    const guests = getLocalGuests();
+    const idx = guests.findIndex((g) => g.id === id);
+    if (idx === -1) return undefined;
+    guests[idx] = { ...guests[idx], ...patch };
+    saveLocalGuests(guests);
+    return localDb.delay(guests[idx]);
+  }
+
+  const ref = doc(db, KEY, id);
+  const snapshot = await getDoc(ref);
+  if (!snapshot.exists()) return undefined;
+  await updateDoc(ref, patch);
+  const reloaded = await getDoc(ref);
+  if (!reloaded.exists()) return undefined;
+  return mapGuestData(reloaded.id, reloaded.data());
 }
 
 export async function deleteGuest(id: string): Promise<void> {
-  const guests = getAll().filter((g) => g.id !== id);
-  saveAll(guests);
-  return localDb.delay(undefined);
+  if (!db) {
+    const guests = getLocalGuests().filter((g) => g.id !== id);
+    saveLocalGuests(guests);
+    return localDb.delay(undefined);
+  }
+
+  await deleteDoc(doc(db, KEY, id));
 }
 
-export interface RsvpResult {
+export interface ResponseResult {
   ok: boolean;
   guest?: Guest;
   error?: string;
 }
 
 /**
- * Regra central de negócio do microsite público:
+ * Regra central de negócio da página pública:
  * - Um convidado só existe se já tiver sido cadastrado pelo administrador (link único).
  * - Confirmar presença sempre ATUALIZA o registro existente (nunca cria duplicado).
  * - Se o evento tiver limite máximo de pessoas, a soma de confirmados não pode ultrapassá-lo.
  * - Sempre grava data/hora da resposta.
  */
-export async function submitRsvp(
+export async function submitResponse(
   slug: string,
   payload: { responsibleName: string; confirmedPeople: number; status: Extract<GuestStatus, 'confirmado' | 'recusado'> }
-): Promise<RsvpResult> {
-  const guests = getAll();
-  const idx = guests.findIndex((g) => g.slug === slug);
-  if (idx === -1) {
+): Promise<ResponseResult> {
+  const guests = await listAllGuests();
+  const guest = guests.find((g) => g.slug === slug);
+  if (!guest) {
     return { ok: false, error: 'Convite não encontrado. Verifique se o link está correto.' };
   }
 
-  const guest = guests[idx];
   const event = await getEvent(guest.eventId);
 
   if (payload.status === 'confirmado') {
@@ -190,27 +322,45 @@ export async function submitRsvp(
         const vagas = Math.max(0, event.maxGuestsTotal - othersConfirmed);
         return {
           ok: false,
-          error: vagas > 0
-            ? `O evento atingiu o limite de convidados. Restam apenas ${vagas} vaga(s).`
-            : 'Infelizmente o evento atingiu o limite máximo de convidados.',
+          error:
+            vagas > 0
+              ? `O evento atingiu o limite de convidados. Restam apenas ${vagas} vaga(s).`
+              : 'Infelizmente o evento atingiu o limite máximo de convidados.',
         };
       }
     }
   }
 
-  guests[idx] = {
+  const updatedGuest: Guest = {
     ...guest,
     responsibleName: payload.responsibleName.trim() || guest.responsibleName,
     confirmedPeople: payload.status === 'confirmado' ? payload.confirmedPeople : 0,
     status: payload.status,
     respondedAt: new Date().toISOString(),
   };
-  saveAll(guests);
-  return { ok: true, guest: guests[idx] };
+
+  if (!db) {
+    const localGuests = getLocalGuests();
+    const idx = localGuests.findIndex((g) => g.slug === slug);
+    if (idx === -1) {
+      return { ok: false, error: 'Convite não encontrado. Verifique se o link está correto.' };
+    }
+    localGuests[idx] = updatedGuest;
+    saveLocalGuests(localGuests);
+    return { ok: true, guest: updatedGuest };
+  }
+
+  await updateDoc(doc(db, KEY, guest.id), {
+    responsibleName: updatedGuest.responsibleName,
+    confirmedPeople: updatedGuest.confirmedPeople,
+    status: updatedGuest.status,
+    respondedAt: updatedGuest.respondedAt,
+  });
+  return { ok: true, guest: updatedGuest };
 }
 
 export async function getEventMetrics(eventId: string): Promise<EventMetrics> {
-  const guests = (await listGuestsByEvent(eventId));
+  const guests = await listGuestsByEvent(eventId);
   const totalInvites = guests.length;
   const totalExpectedPeople = guests.reduce((s, g) => s + g.expectedPeople, 0);
   const confirmed = guests.filter((g) => g.status === 'confirmado');

@@ -14,8 +14,8 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
 
   function handleResetDemo() {
-    localStorage.removeItem('rsvp_system_v1:events');
-    localStorage.removeItem('rsvp_system_v1:guests');
+    localStorage.removeItem('gala_system_v1:events');
+    localStorage.removeItem('gala_system_v1:guests');
     setMessage('Dados de demonstração removidos. Recarregue a página para começar do zero.');
     refresh();
   }

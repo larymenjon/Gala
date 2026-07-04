@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 import { browserLocalPersistence, getAuth, setPersistence, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -13,11 +14,13 @@ const firebaseConfig = {
 export const isFirebaseConfigured = Object.values(firebaseConfig).every(Boolean);
 
 let auth: Auth | null = null;
+let db: Firestore | null = null;
 
 if (isFirebaseConfigured) {
   const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
   auth = getAuth(app);
+  db = getFirestore(app);
   void setPersistence(auth, browserLocalPersistence);
 }
 
-export { auth };
+export { auth, db };

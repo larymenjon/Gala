@@ -8,6 +8,7 @@ import { formatDate } from '../utils/format';
 import { Field, Input } from '../components/FormFields';
 import BrandMark from '../components/BrandMark';
 import { getEventIcon } from '../utils/eventIcons';
+import { getInvitationTheme, INVITATION_STYLE_LABELS } from '../utils/invitationTheme';
 
 type Screen = 'loading' | 'not_found' | 'form' | 'success';
 
@@ -58,7 +59,7 @@ export default function PublicRsvpPage() {
     setSubmitting(true);
     setError('');
 
-    const result = await guestService.submitRsvp(slug, {
+    const result = await guestService.submitResponse(slug, {
       responsibleName: name,
       confirmedPeople: Number(people),
       status,
@@ -131,13 +132,25 @@ export default function PublicRsvpPage() {
     );
   }
 
+  const theme = getInvitationTheme(event?.invitationStyle);
+
   return (
     <PublicShell event={event ?? undefined}>
       <div className="mx-auto max-w-md py-6">
         {event?.invitationStyle && (
           <p className="mb-3 text-center text-xs font-semibold uppercase tracking-[0.34em] text-gold/80">
-            {event.invitationStyle}
+            {INVITATION_STYLE_LABELS[event.invitationStyle]}
           </p>
+        )}
+
+        {event?.invitationArtworkUrl && (
+          <div className="mb-6 overflow-hidden rounded-[28px] border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.16)]">
+            <img
+              src={event.invitationArtworkUrl}
+              alt={`Convite personalizado de ${event.name}`}
+              className="h-auto w-full object-cover"
+            />
+          </div>
         )}
 
         {event?.invitationHeadline && (
@@ -155,13 +168,25 @@ export default function PublicRsvpPage() {
           </div>
         )}
 
-        <div className="space-y-5 rounded-2xl border border-white/10 bg-white/8 p-6 backdrop-blur-sm">
+        <div
+          className="space-y-5 rounded-2xl border p-6 backdrop-blur-sm"
+          style={{
+            backgroundColor: theme.cardBackgroundColor,
+            borderColor: theme.borderColor,
+            color: theme.textColor,
+          }}
+        >
           <Field label={<span className="text-cream/80">Seu nome</span> as unknown as string}>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Como preferir ser chamado(a)"
-              className="border-white/15 bg-white/10 text-cream placeholder:text-cream/25 focus:border-gold focus:ring-gold"
+              className="placeholder:text-cream/25"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                borderColor: theme.borderColor,
+                color: theme.textColor,
+              }}
             />
           </Field>
 
@@ -175,7 +200,12 @@ export default function PublicRsvpPage() {
               max={guest?.expectedPeople}
               value={people}
               onChange={(e) => setPeople(e.target.value)}
-              className="border-white/15 bg-white/10 text-cream placeholder:text-cream/25 focus:border-gold focus:ring-gold"
+              className="placeholder:text-cream/25"
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.08)',
+                borderColor: theme.borderColor,
+                color: theme.textColor,
+              }}
             />
           </Field>
 
@@ -185,14 +215,20 @@ export default function PublicRsvpPage() {
             <button
               onClick={() => handleSubmit('confirmado')}
               disabled={submitting}
-              className="w-full rounded-xl bg-gold py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-gold-light disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl py-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: theme.primaryColor, color: '#FFFFFF' }}
             >
               {submitting ? 'Confirmando...' : event?.primaryActionLabel || 'Confirmar presença'}
             </button>
             <button
               onClick={() => handleSubmit('recusado')}
               disabled={submitting}
-              className="w-full rounded-xl border border-white/15 py-3 text-sm text-cream/60 transition-colors hover:border-white/30 hover:text-cream disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl border py-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                backgroundColor: 'transparent',
+                borderColor: theme.secondaryColor,
+                color: theme.secondaryColor,
+              }}
             >
               {event?.secondaryActionLabel || 'Não poderei ir'}
             </button>
@@ -205,11 +241,12 @@ export default function PublicRsvpPage() {
 
 function PublicShell({ event, children }: { event?: EventItem; children: ReactNode }) {
   const EventIcon = getEventIcon(event?.coverIcon);
+  const theme = getInvitationTheme(event?.invitationStyle);
 
   return (
-    <div className="bg-noise flex min-h-screen flex-col bg-ink">
+    <div className="bg-noise flex min-h-screen flex-col" style={{ backgroundColor: theme.backgroundColor, color: theme.textColor }}>
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/2 top-0 h-[400px] w-[600px] -translate-x-1/2 rounded-full bg-gold/5 blur-3xl" />
+        <div className="absolute left-1/2 top-0 h-[400px] w-[600px] -translate-x-1/2 rounded-full blur-3xl" style={{ backgroundColor: `${theme.secondaryColor}14` }} />
       </div>
 
       <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-12">
@@ -218,8 +255,8 @@ function PublicShell({ event, children }: { event?: EventItem; children: ReactNo
             size={72}
             className="justify-center"
             iconClassName="rounded-[22px] shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
-            labelClassName="text-cream"
-            subtitleClassName="text-gold/80"
+            labelClassName=""
+            subtitleClassName=""
           />
         </div>
 
@@ -228,31 +265,31 @@ function PublicShell({ event, children }: { event?: EventItem; children: ReactNo
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gold/10 text-gold">
               <EventIcon className="h-7 w-7" />
             </div>
-            <h1 className="mb-3 font-display text-3xl leading-tight text-cream md:text-4xl">{event.name}</h1>
-            <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-cream/50">
+            <h1 className="mb-3 font-display text-3xl leading-tight md:text-4xl" style={{ color: theme.textColor }}>{event.name}</h1>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-sm" style={{ color: theme.mutedTextColor }}>
               <span className="inline-flex items-center gap-1.5">
                 <CalendarDays className="h-4 w-4" />
                 {formatDate(event.date)}
               </span>
-              <span className="text-cream/25">•</span>
+              <span style={{ color: theme.mutedTextColor }}>•</span>
               <span className="inline-flex items-center gap-1.5">
                 <Clock3 className="h-4 w-4" />
                 {event.time}
               </span>
-              <span className="text-cream/25">•</span>
+              <span style={{ color: theme.mutedTextColor }}>•</span>
               <span className="inline-flex items-center gap-1.5">
                 <MapPin className="h-4 w-4" />
                 {event.location}
               </span>
             </div>
-            {event.description && <p className="mx-auto mt-3 max-w-sm text-xs leading-relaxed text-cream/40">{event.description}</p>}
+            {event.description && <p className="mx-auto mt-3 max-w-sm text-xs leading-relaxed" style={{ color: theme.mutedTextColor }}>{event.description}</p>}
           </div>
         )}
 
         <div className="w-full max-w-md">{children}</div>
       </div>
 
-      <footer className="relative py-5 text-center text-xs text-cream/20">
+      <footer className="relative py-5 text-center text-xs" style={{ color: theme.mutedTextColor }}>
         Powered by <span className="font-display">Gala</span>
       </footer>
     </div>

@@ -4,14 +4,16 @@
 
 import type { EventItem, Guest } from './types';
 import { generateSlug } from './utils/slug';
+import { isFirebaseConfigured } from './services/firebase';
 
-const NS = 'rsvp_system_v1';
+const NS = 'gala_system_v1';
 
 function stored(key: string) {
   return localStorage.getItem(`${NS}:${key}`);
 }
 
 export function seedDemoData() {
+  if (isFirebaseConfigured) return;
   if (stored('events')) return;
 
   const eventId = 'demo-event-001';

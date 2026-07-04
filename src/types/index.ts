@@ -19,6 +19,14 @@ export interface EventItem {
   description: string;
   welcomeMessage: string;
   invitationStyle?: 'editorial' | 'modern' | 'romantic' | 'classic';
+  invitationArtworkUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+  textColor?: string;
+  mutedTextColor?: string;
+  backgroundColor?: string;
+  cardBackgroundColor?: string;
+  borderColor?: string;
   invitationHeadline?: string;
   invitationSubtitle?: string;
   invitationNote?: string;
