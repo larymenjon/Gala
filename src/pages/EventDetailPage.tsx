@@ -16,7 +16,7 @@ import * as guestService from '../services/guestService';
 import { exportGuestsToCsv, exportGuestsToPdf } from '../utils/exporters';
 import { formatDate } from '../utils/format';
 import { getEventIcon } from '../utils/eventIcons';
-import { publicRsvpUrl } from '../utils/slug';
+import { publicEventUrl } from '../utils/slug';
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +25,7 @@ export default function EventDetailPage() {
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [toDelete, setToDelete] = useState<Guest | null>(null);
   const [deleteError, setDeleteError] = useState('');
-  const shareUrl = guests[0] ? publicRsvpUrl(guests[0].slug) : '';
+  const shareUrl = event ? publicEventUrl(event.id) : '';
 
   async function handleAddGuest(data: { responsibleName: string; phone: string; expectedPeople: number }) {
     if (!id) return;
@@ -96,7 +96,7 @@ export default function EventDetailPage() {
           {shareUrl && (
             <div className="flex items-center gap-2 rounded-xl border border-ink/10 bg-ink/[0.02] px-3 py-2">
               <div className="min-w-0">
-                <p className="text-[10px] uppercase tracking-[0.22em] text-ink/40">Link de confirmação</p>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-ink/40">Link do convite</p>
                 <p className="max-w-[240px] truncate text-xs text-ink/65">{shareUrl}</p>
               </div>
               <CopyLinkButton url={shareUrl} label="Copiar" />

@@ -17,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/r/:slug" element={<PublicRsvpPage />} />
+        <Route path="/i/:eventId" element={<PublicRsvpPage />} />
         <Route path="/admin/login" element={<LoginPage />} />
         <Route path="/admin" element={<Navigate to="/admin/inicio" replace />} />
         <Route path="/admin/inicio" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />

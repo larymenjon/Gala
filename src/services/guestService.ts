@@ -433,6 +433,70 @@ export interface ResponseResult {
   error?: string;
 }
 
+export async function submitOpenEventResponse(
+  eventId: string,
+  payload: { responsibleName: string; confirmedPeople: number; status: Extract<GuestStatus, 'confirmado' | 'recusado'> }
+): Promise<ResponseResult> {
+  const MAX_CONFIRM_PEOPLE = 10;
+  const event = await getEvent(eventId);
+  if (!event) {
+    return { ok: false, error: 'Evento não encontrado. Verifique se o link está correto.' };
+  }
+
+  if (payload.status === 'confirmado') {
+    if (payload.confirmedPeople < 1) {
+      return { ok: false, error: 'Informe ao menos 1 pessoa para confirmar presença.' };
+    }
+    if (payload.confirmedPeople > MAX_CONFIRM_PEOPLE) {
+      return { ok: false, error: `Você pode confirmar no máximo ${MAX_CONFIRM_PEOPLE} pessoa(s) por convite.` };
+    }
+    const guests = await listGuestsByEvent(eventId);
+    if (event.maxGuestsTotal) {
+      const totalConfirmed = guests.filter((g) => g.status === 'confirmado').reduce((sum, g) => sum + g.confirmedPeople, 0);
+      if (totalConfirmed + payload.confirmedPeople > event.maxGuestsTotal) {
+        const vagas = Math.max(0, event.maxGuestsTotal - totalConfirmed);
+        return {
+          ok: false,
+          error:
+            vagas > 0
+              ? `O evento atingiu o limite de convidados. Restam apenas ${vagas} vaga(s).`
+              : 'Infelizmente o evento atingiu o limite máximo de convidados.',
+        };
+      }
+    }
+  }
+
+  const guest: Guest = {
+    id: crypto.randomUUID(),
+    eventId,
+    responsibleName: payload.responsibleName.trim() || event.name,
+    phone: '',
+    expectedPeople: payload.status === 'confirmado' ? payload.confirmedPeople : 1,
+    confirmedPeople: payload.status === 'confirmado' ? payload.confirmedPeople : 0,
+    status: payload.status,
+    respondedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    slug: generateSlug(),
+  };
+
+  if (!db) {
+    const guests = getLocalGuests();
+    guests.push(guest);
+    saveLocalGuests(guests);
+    return { ok: true, guest };
+  }
+
+  try {
+    await setDoc(doc(db, KEY, guest.id), guest);
+    return { ok: true, guest };
+  } catch {
+    const guests = getLocalGuests();
+    guests.push(guest);
+    saveLocalGuests(guests);
+    return { ok: true, guest };
+  }
+}
+
 /**
  * Regra central de negócio da página pública:
  * - Um convidado só existe se já tiver sido cadastrado pelo administrador (link único).

@@ -15,3 +15,8 @@ export function publicRsvpUrl(slug: string): string {
   const base = import.meta.env.BASE_URL || '/';
   return `${window.location.origin}${base}#/r/${slug}`;
 }
+
+export function publicEventUrl(eventId: string): string {
+  const base = import.meta.env.BASE_URL || '/';
+  return `${window.location.origin}${base}#/i/${eventId}`;
+}

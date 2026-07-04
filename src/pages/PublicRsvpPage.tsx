@@ -13,7 +13,7 @@ import { getInvitationTheme, INVITATION_STYLE_LABELS } from '../utils/invitation
 type Screen = 'loading' | 'not_found' | 'form' | 'success';
 
 export default function PublicRsvpPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const { slug, eventId } = useParams<{ slug?: string; eventId?: string }>();
   const [screen, setScreen] = useState<Screen>('loading');
   const [guest, setGuest] = useState<Guest | null>(null);
   const [event, setEvent] = useState<EventItem | null>(null);
@@ -26,32 +26,48 @@ export default function PublicRsvpPage() {
 
   useEffect(() => {
     async function load() {
-      if (!slug) {
-        setScreen('not_found');
+      if (slug) {
+        const g = await guestService.getGuestBySlug(slug);
+        if (!g) {
+          setScreen('not_found');
+          return;
+        }
+
+        const ev = await eventService.getEvent(g.eventId);
+        setGuest(g);
+        setEvent(ev ?? null);
+        setName(g.responsibleName);
+        const initialPeople = g.status === 'confirmado' ? g.confirmedPeople : g.expectedPeople;
+        setPeople(String(Math.min(Math.max(initialPeople || 1, 1), 10)));
+        setScreen(g.status !== 'pendente' ? 'success' : 'form');
+        setConfirmed(g.status !== 'pendente' ? (g.status as 'confirmado' | 'recusado') : null);
         return;
       }
 
-      const g = await guestService.getGuestBySlug(slug);
-      if (!g) {
-        setScreen('not_found');
+      if (eventId) {
+        const ev = await eventService.getEvent(eventId);
+        if (!ev) {
+          setScreen('not_found');
+          return;
+        }
+
+        setGuest(null);
+        setEvent(ev);
+        setName('');
+        setPeople('1');
+        setScreen('form');
+        setConfirmed(null);
         return;
       }
 
-      const ev = await eventService.getEvent(g.eventId);
-      setGuest(g);
-      setEvent(ev ?? null);
-      setName(g.responsibleName);
-      const initialPeople = g.status === 'confirmado' ? g.confirmedPeople : g.expectedPeople;
-      setPeople(String(Math.min(Math.max(initialPeople || 1, 1), 10)));
-      setScreen(g.status !== 'pendente' ? 'success' : 'form');
-      setConfirmed(g.status !== 'pendente' ? (g.status as 'confirmado' | 'recusado') : null);
+      setScreen('not_found');
     }
 
     load();
-  }, [slug]);
+  }, [slug, eventId]);
 
   async function handleSubmit(status: 'confirmado' | 'recusado') {
-    if (!slug) return;
+    if (!slug && !eventId) return;
     if (status === 'confirmado' && (!people || Number(people) < 1)) {
       setError('Informe quantas pessoas irão.');
       return;
@@ -64,11 +80,17 @@ export default function PublicRsvpPage() {
     setSubmitting(true);
     setError('');
 
-    const result = await guestService.submitResponse(slug, {
-      responsibleName: name,
-      confirmedPeople: Number(people),
-      status,
-    });
+    const result = slug
+      ? await guestService.submitResponse(slug, {
+          responsibleName: name,
+          confirmedPeople: Number(people),
+          status,
+        })
+      : await guestService.submitOpenEventResponse(eventId!, {
+          responsibleName: name,
+          confirmedPeople: Number(people),
+          status,
+        });
 
     setSubmitting(false);
 
@@ -118,10 +140,12 @@ export default function PublicRsvpPage() {
             </h2>
             <p className="mb-8 text-sm leading-relaxed text-cream/60">
               {isConfirmed
-                ? `Que ótima notícia, ${guest?.responsibleName?.split(' ')[0]}! Estamos ansiosos para receber ${
-                    guest?.confirmedPeople === 1 ? 'você' : `você e mais ${(guest?.confirmedPeople ?? 1) - 1} pessoa(s)`
+                ? `Que ótima notícia, ${guest?.responsibleName?.split(' ')[0] || name.split(' ')[0] || 'você'}! Estamos ansiosos para receber ${
+                    (guest?.confirmedPeople ?? Number(people)) === 1
+                      ? 'você'
+                      : `você e mais ${Math.max((guest?.confirmedPeople ?? Number(people)) - 1, 0)} pessoa(s)`
                   }.`
-                : `Sentiremos sua falta, ${guest?.responsibleName?.split(' ')[0]}. Obrigado por nos avisar!`}
+                : `Sentiremos sua falta, ${guest?.responsibleName?.split(' ')[0] || name?.split(' ')[0] || 'você'}. Obrigado por nos avisar!`}
             </p>
 
             {isConfirmed && (
