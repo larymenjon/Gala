@@ -1,10 +1,10 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+﻿import { useEffect, useState, type CSSProperties } from 'react';
 import type { EventItem } from '../types';
 import Modal from './Modal';
 import Button from './Button';
 import { Field, Input, Textarea } from './FormFields';
 import { EVENT_ICON_OPTIONS } from '../utils/eventIcons';
-import { Eye, Palette } from 'lucide-react';
+import { CalendarDays, Clock3, Eye, MapPin, Palette, Sparkles } from 'lucide-react';
 import {
   getInvitationTheme,
   INVITATION_STYLE_LABELS,
@@ -377,55 +377,87 @@ export default function EventFormModal({
               Prévia do convite
             </div>
 
-            <div
-              className="rounded-[24px] border p-5 shadow-[0_18px_45px_rgba(15,27,51,0.06)]"
-              style={{
-                backgroundColor: form.backgroundColor || theme.backgroundColor,
-                borderColor: form.borderColor || theme.borderColor,
-                ...previewStyle,
-              }}
-            >
-              {form.invitationArtworkUrl && (
-                <div className="mb-5 overflow-hidden rounded-[20px] border" style={{ borderColor: form.borderColor || theme.borderColor }}>
-                  <img src={form.invitationArtworkUrl} alt="Prévia da arte do convite" className="aspect-[210/297] w-full object-contain bg-black/5" />
+            <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_45px_rgba(15,27,51,0.06)]" style={{ backgroundColor: form.backgroundColor || theme.backgroundColor, borderColor: form.borderColor || theme.borderColor, ...previewStyle }}>
+              <div className="px-4 pb-5 pt-5">
+                <div className="flex items-center justify-between text-[0.62rem] uppercase tracking-[0.3em]" style={{ color: 'var(--gala-muted)' }}>
+                  <span>Gala</span>
+                  <span>{INVITATION_STYLE_LABELS[form.invitationStyle]}</span>
                 </div>
-              )}
 
-              <div className="text-center" style={{ color: 'var(--gala-text)' }}>
-                <div className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--gala-secondary)' }}>
-                  {INVITATION_STYLE_LABELS[form.invitationStyle]}
+                <div className="mt-4 flex flex-col items-center text-center">
+                  {form.invitationArtworkUrl ? (
+                    <div className="mb-4 overflow-hidden rounded-[22px] border bg-white/40 p-2 shadow-[0_16px_35px_rgba(15,27,51,0.08)]" style={{ borderColor: form.borderColor || theme.borderColor }}>
+                      <img src={form.invitationArtworkUrl} alt="Prévia da arte do convite" className="aspect-[210/297] w-full max-w-[280px] object-contain" />
+                    </div>
+                  ) : (
+                    <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-[22px] bg-[rgba(200,155,60,0.14)] text-[var(--gala-secondary)] shadow-[0_14px_30px_rgba(200,155,60,0.18)]">
+                      <Sparkles className="h-10 w-10" />
+                    </div>
+                  )}
+
+                  <div className="font-display text-[2.2rem] leading-[0.95]" style={{ color: 'var(--gala-text)' }}>
+                    {previewHeadline}
+                  </div>
+                  <div className="mt-2 text-[0.8rem] uppercase tracking-[0.34em]" style={{ color: 'var(--gala-secondary)' }}>
+                    {previewSubtitle}
+                  </div>
                 </div>
-                <div className="mt-3 font-display text-3xl">{previewHeadline}</div>
-                <div className="mt-2 font-display text-xl" style={{ color: 'var(--gala-secondary)' }}>
-                  {previewSubtitle}
+
+                <div className="mx-auto mt-5 max-w-[340px] rounded-[30px] border bg-[rgba(255,255,255,0.78)] px-4 py-5 shadow-[0_14px_35px_rgba(15,27,51,0.07)]" style={{ borderColor: form.borderColor || theme.borderColor }}>
+                  <div className="space-y-2 text-center text-sm" style={{ color: 'var(--gala-muted)' }}>
+                    <div className="flex items-center justify-center gap-2">
+                      <CalendarDays className="h-4 w-4" />
+                      <span>{form.date || 'Data a definir'}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <Clock3 className="h-4 w-4" />
+                      <span>{form.time || 'Horário a definir'}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      <span>{form.location || 'Local do evento'}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-4 text-sm leading-7" style={{ color: 'var(--gala-muted)' }}>
+
+                <div className="mt-4 text-center text-sm leading-relaxed" style={{ color: 'var(--gala-muted)' }}>
                   {previewNote}
                 </div>
               </div>
 
-              <div
-                className="mt-5 rounded-[22px] border p-4"
-                style={{
-                  backgroundColor: form.cardBackgroundColor || theme.cardBackgroundColor,
-                  borderColor: form.borderColor || theme.borderColor,
-                }}
-              >
-                <div className="text-center text-sm leading-7" style={{ color: 'var(--gala-muted)' }}>
-                  {form.welcomeMessage || 'Mensagem de boas-vindas do convite.'}
+              <div className="rounded-t-[28px] border-t px-4 pb-5 pt-5" style={{ backgroundColor: form.cardBackgroundColor || theme.cardBackgroundColor, borderColor: form.borderColor || theme.borderColor }}>
+                <div className="space-y-3">
+                  <div className="text-sm font-medium" style={{ color: 'var(--gala-text)' }}>
+                    Seu nome
+                  </div>
+                  <div className="rounded-xl border px-4 py-3 text-sm" style={{ borderColor: form.borderColor || theme.borderColor, color: 'var(--gala-muted)' }}>
+                    Ana
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="text-sm font-medium" style={{ color: 'var(--gala-text)' }}>
+                    Quem vai comparecer?
+                  </div>
+                  <div className="space-y-2 rounded-[22px] border p-3" style={{ borderColor: form.borderColor || theme.borderColor }}>
+                    {['Laryssa', 'Jhone', 'Heitor'].map((label, index) => (
+                      <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2.5 text-sm shadow-[0_6px_16px_rgba(15,27,51,0.04)]">
+                        <span style={{ color: 'var(--gala-text)' }}>{label}</span>
+                        <span className="rounded-full bg-[rgba(200,155,60,0.12)] px-2.5 py-1 text-[11px] uppercase tracking-wide" style={{ color: 'var(--gala-secondary)' }}>
+                          {index === 2 ? 'Criança' : 'Adulto'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="mt-4 grid gap-3">
-                  <button
-                    type="button"
-                    className="w-full rounded-[16px] px-4 py-3 text-sm font-semibold text-white"
-                    style={{ backgroundColor: form.primaryColor || theme.primaryColor }}
-                  >
+                  <button type="button" className="w-full rounded-[18px] px-4 py-3.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(15,27,51,0.16)]" style={{ backgroundColor: form.primaryColor || theme.primaryColor }}>
                     {primaryLabel}
                   </button>
                   <button
                     type="button"
-                    className="w-full rounded-[16px] border bg-white px-4 py-3 text-sm font-semibold"
+                    className="w-full rounded-[18px] border bg-white px-4 py-3.5 text-sm font-semibold"
                     style={{
                       borderColor: form.secondaryColor || theme.secondaryColor,
                       color: form.secondaryColor || theme.secondaryColor,
@@ -434,14 +466,6 @@ export default function EventFormModal({
                     {secondaryLabel}
                   </button>
                 </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between text-xs uppercase tracking-[0.22em]" style={{ color: 'var(--gala-muted)' }}>
-                <span>{form.date || 'Data a definir'}</span>
-                <span>{form.time || 'Horário'}</span>
-              </div>
-              <div className="mt-2 text-center text-sm" style={{ color: 'var(--gala-muted)' }}>
-                {form.location || 'Local do evento'}
               </div>
             </div>
           </div>

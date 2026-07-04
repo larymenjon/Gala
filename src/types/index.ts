@@ -1,4 +1,11 @@
 export type GuestStatus = 'pendente' | 'confirmado' | 'recusado';
+export type GuestAttendeeType = 'adult' | 'child';
+
+export interface GuestAttendee {
+  name: string;
+  type: GuestAttendeeType;
+}
+
 export type EventCoverIcon =
   | 'sparkles'
   | 'heart'
@@ -49,6 +56,9 @@ export interface Guest {
   respondedAt?: string;
   createdAt: string;
   slug: string; // unique token used in the public link
+  attendees?: GuestAttendee[];
+  adultsCount?: number;
+  childrenCount?: number;
 }
 
 export interface EventMetrics {

@@ -1,5 +1,5 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
-import type { EventMetrics, Guest, GuestStatus } from '../types';
+import type { EventMetrics, Guest, GuestAttendee, GuestStatus } from '../types';
 import { generateSlug } from '../utils/slug';
 import { auth, db } from './firebase';
 import { localDb } from './storage';
@@ -20,8 +20,32 @@ function normalizePhone(value: string): string {
   return value.replace(/\D/g, '');
 }
 
+function normalizeAttendees(attendees: GuestAttendee[] | undefined): GuestAttendee[] {
+  if (!Array.isArray(attendees)) return [];
+
+  return attendees
+    .map<GuestAttendee>((attendee) => ({
+      name: String(attendee?.name ?? '').trim(),
+      type: attendee?.type === 'child' ? 'child' : 'adult',
+    }))
+    .filter((attendee) => attendee.name.length > 0);
+}
+
+function countAttendees(attendees: GuestAttendee[] | undefined): { adultsCount: number; childrenCount: number; total: number } {
+  const normalized = normalizeAttendees(attendees);
+  return {
+    adultsCount: normalized.filter((attendee) => attendee.type === 'adult').length,
+    childrenCount: normalized.filter((attendee) => attendee.type === 'child').length,
+    total: normalized.length,
+  };
+}
+
+function getGuestDisplayName(guest: Guest): string {
+  return guest.attendees?.length ? guest.attendees.map((attendee) => attendee.name).join(', ') : guest.responsibleName;
+}
+
 function compareGuestNames(a: Guest, b: Guest): number {
-  const byName = a.responsibleName.localeCompare(b.responsibleName, 'pt-BR', { sensitivity: 'base' });
+  const byName = getGuestDisplayName(a).localeCompare(getGuestDisplayName(b), 'pt-BR', { sensitivity: 'base' });
   if (byName !== 0) return byName;
   return a.createdAt.localeCompare(b.createdAt);
 }
@@ -35,17 +59,32 @@ function saveLocalGuests(guests: Guest[]): void {
 }
 
 function mapGuestData(id: string, data: Record<string, unknown>): Guest {
+  const attendees = normalizeAttendees(
+    Array.isArray(data.attendees)
+      ? data.attendees.map((attendee) => ({
+          name: String((attendee as Record<string, unknown>)?.name ?? ''),
+          type: (attendee as Record<string, unknown>)?.type === 'child' ? 'child' : 'adult',
+        }))
+      : undefined,
+  );
+  const counts = countAttendees(attendees);
+  const expectedPeopleRaw = Number(data.expectedPeople ?? counts.total ?? 1);
+  const confirmedPeopleRaw = Number(data.confirmedPeople ?? (String(data.status ?? '') === 'confirmado' ? counts.total : 0));
+
   return {
     id,
     eventId: String(data.eventId ?? ''),
     responsibleName: String(data.responsibleName ?? ''),
     phone: String(data.phone ?? ''),
-    expectedPeople: Number(data.expectedPeople ?? 1),
-    confirmedPeople: Number(data.confirmedPeople ?? 0),
+    expectedPeople: Number.isFinite(expectedPeopleRaw) && expectedPeopleRaw > 0 ? expectedPeopleRaw : Math.max(1, counts.total),
+    confirmedPeople: Number.isFinite(confirmedPeopleRaw) && confirmedPeopleRaw >= 0 ? confirmedPeopleRaw : counts.total,
     status: data.status as GuestStatus,
     respondedAt: data.respondedAt ? String(data.respondedAt) : undefined,
     createdAt: String(data.createdAt ?? new Date().toISOString()),
     slug: String(data.slug ?? ''),
+    attendees: attendees.length > 0 ? attendees : undefined,
+    adultsCount: counts.adultsCount || undefined,
+    childrenCount: counts.childrenCount || undefined,
   };
 }
 
@@ -81,9 +120,7 @@ export async function listGuestsByEvent(eventId: string): Promise<Guest[]> {
         .sort(compareGuestNames);
       return localDb.delay(guests);
     }
-    return snapshot.docs
-      .map((snap) => mapGuestData(snap.id, snap.data()))
-      .sort(compareGuestNames);
+    return snapshot.docs.map((snap) => mapGuestData(snap.id, snap.data())).sort(compareGuestNames);
   } catch {
     const guests = getLocalGuests()
       .filter((g) => g.eventId === eventId)
@@ -146,12 +183,7 @@ export async function getGuestBySlug(slug: string): Promise<Guest | undefined> {
   }
 }
 
-export async function createGuest(input: {
-  eventId: string;
-  responsibleName: string;
-  phone: string;
-  expectedPeople: number;
-}): Promise<Guest> {
+export async function createGuest(input: { eventId: string; responsibleName: string; phone: string; expectedPeople: number }): Promise<Guest> {
   if (!db) {
     const guests = getLocalGuests();
     const guest: Guest = {
@@ -435,7 +467,7 @@ export interface ResponseResult {
 
 export async function submitOpenEventResponse(
   eventId: string,
-  payload: { responsibleName: string; confirmedPeople: number; status: Extract<GuestStatus, 'confirmado' | 'recusado'> }
+  payload: { attendees: GuestAttendee[]; status: Extract<GuestStatus, 'confirmado' | 'recusado'> }
 ): Promise<ResponseResult> {
   const MAX_CONFIRM_PEOPLE = 10;
   const event = await getEvent(eventId);
@@ -443,17 +475,20 @@ export async function submitOpenEventResponse(
     return { ok: false, error: 'Evento não encontrado. Verifique se o link está correto.' };
   }
 
+  const attendees = normalizeAttendees(payload.attendees);
+
   if (payload.status === 'confirmado') {
-    if (payload.confirmedPeople < 1) {
+    if (attendees.length < 1) {
       return { ok: false, error: 'Informe ao menos 1 pessoa para confirmar presença.' };
     }
-    if (payload.confirmedPeople > MAX_CONFIRM_PEOPLE) {
+    if (attendees.length > MAX_CONFIRM_PEOPLE) {
       return { ok: false, error: `Você pode confirmar no máximo ${MAX_CONFIRM_PEOPLE} pessoa(s) por convite.` };
     }
+
     const guests = await listGuestsByEvent(eventId);
     if (event.maxGuestsTotal) {
-      const totalConfirmed = guests.filter((g) => g.status === 'confirmado').reduce((sum, g) => sum + g.confirmedPeople, 0);
-      if (totalConfirmed + payload.confirmedPeople > event.maxGuestsTotal) {
+      const totalConfirmed = guests.filter((g) => g.status === 'confirmado').reduce((sum, g) => sum + (g.confirmedPeople || g.attendees?.length || 0), 0);
+      if (totalConfirmed + attendees.length > event.maxGuestsTotal) {
         const vagas = Math.max(0, event.maxGuestsTotal - totalConfirmed);
         return {
           ok: false,
@@ -466,17 +501,21 @@ export async function submitOpenEventResponse(
     }
   }
 
+  const counts = countAttendees(attendees);
   const guest: Guest = {
     id: crypto.randomUUID(),
     eventId,
-    responsibleName: payload.responsibleName.trim() || event.name,
+    responsibleName: attendees.map((attendee) => attendee.name).join(', ') || event.name,
     phone: '',
-    expectedPeople: payload.status === 'confirmado' ? payload.confirmedPeople : 1,
-    confirmedPeople: payload.status === 'confirmado' ? payload.confirmedPeople : 0,
+    expectedPeople: payload.status === 'confirmado' ? counts.total : 1,
+    confirmedPeople: payload.status === 'confirmado' ? counts.total : 0,
     status: payload.status,
     respondedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     slug: generateSlug(),
+    attendees: payload.status === 'confirmado' ? attendees : undefined,
+    adultsCount: payload.status === 'confirmado' ? counts.adultsCount : undefined,
+    childrenCount: payload.status === 'confirmado' ? counts.childrenCount : undefined,
   };
 
   if (!db) {
@@ -586,7 +625,7 @@ export async function getEventMetrics(eventId: string): Promise<EventMetrics> {
   const confirmed = guests.filter((g) => g.status === 'confirmado');
   const declined = guests.filter((g) => g.status === 'recusado');
   const pending = guests.filter((g) => g.status === 'pendente');
-  const totalConfirmedPeople = confirmed.reduce((s, g) => s + g.confirmedPeople, 0);
+  const totalConfirmedPeople = confirmed.reduce((s, g) => s + (g.confirmedPeople || g.attendees?.length || 0), 0);
   const confirmationRate = totalInvites > 0 ? Math.round(((confirmed.length + declined.length) / totalInvites) * 100) : 0;
 
   return {

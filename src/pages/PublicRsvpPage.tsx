@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import { CalendarDays, Clock3, MailX, MapPin, PartyPopper, SearchX } from 'lucide-react';
-import type { EventItem, Guest } from '../types';
+import { CalendarDays, Clock3, MailX, MapPin, PartyPopper, Plus, SearchX, Trash2, Users } from 'lucide-react';
+import type { EventItem, Guest, GuestAttendee, GuestAttendeeType } from '../types';
 import * as guestService from '../services/guestService';
 import * as eventService from '../services/eventService';
 import { formatDate } from '../utils/format';
@@ -11,22 +11,54 @@ import { getEventIcon } from '../utils/eventIcons';
 import { getInvitationTheme, INVITATION_STYLE_LABELS } from '../utils/invitationTheme';
 
 type Screen = 'loading' | 'not_found' | 'form' | 'success';
+type Mode = 'legacy' | 'event';
+
+type AttendeeDraft = {
+  id: string;
+  name: string;
+  type: GuestAttendeeType;
+};
+
+const MAX_EVENT_ATTENDEES = 10;
+
+function createAttendeeDraft(type: GuestAttendeeType = 'adult'): AttendeeDraft {
+  return {
+    id: crypto.randomUUID(),
+    name: '',
+    type,
+  };
+}
+
+function normalizeEventAttendees(rows: AttendeeDraft[]): GuestAttendee[] {
+  return rows
+    .map((row) => ({
+      name: row.name.trim(),
+      type: row.type,
+    }))
+    .filter((row) => row.name.length > 0);
+}
+
+function attendeeTypeLabel(type: GuestAttendeeType): string {
+  return type === 'child' ? 'Criança' : 'Adulto';
+}
 
 export default function PublicRsvpPage() {
   const { slug, eventId } = useParams<{ slug?: string; eventId?: string }>();
+  const mode: Mode = eventId ? 'event' : 'legacy';
   const [screen, setScreen] = useState<Screen>('loading');
   const [guest, setGuest] = useState<Guest | null>(null);
   const [event, setEvent] = useState<EventItem | null>(null);
 
-  const [name, setName] = useState('');
+  const [contactName, setContactName] = useState('');
   const [people, setPeople] = useState('1');
+  const [attendees, setAttendees] = useState<AttendeeDraft[]>([createAttendeeDraft()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState<'confirmado' | 'recusado' | null>(null);
 
   useEffect(() => {
     async function load() {
-      if (slug) {
+      if (slug && mode === 'legacy') {
         const g = await guestService.getGuestBySlug(slug);
         if (!g) {
           setScreen('not_found');
@@ -36,15 +68,15 @@ export default function PublicRsvpPage() {
         const ev = await eventService.getEvent(g.eventId);
         setGuest(g);
         setEvent(ev ?? null);
-        setName(g.responsibleName);
+        setContactName(g.responsibleName);
         const initialPeople = g.status === 'confirmado' ? g.confirmedPeople : g.expectedPeople;
-        setPeople(String(Math.min(Math.max(initialPeople || 1, 1), 10)));
+        setPeople(String(Math.min(Math.max(initialPeople || 1, 1), MAX_EVENT_ATTENDEES)));
         setScreen(g.status !== 'pendente' ? 'success' : 'form');
         setConfirmed(g.status !== 'pendente' ? (g.status as 'confirmado' | 'recusado') : null);
         return;
       }
 
-      if (eventId) {
+      if (eventId && mode === 'event') {
         const ev = await eventService.getEvent(eventId);
         if (!ev) {
           setScreen('not_found');
@@ -53,8 +85,9 @@ export default function PublicRsvpPage() {
 
         setGuest(null);
         setEvent(ev);
-        setName('');
+        setContactName('');
         setPeople('1');
+        setAttendees([createAttendeeDraft()]);
         setScreen('form');
         setConfirmed(null);
         return;
@@ -64,33 +97,68 @@ export default function PublicRsvpPage() {
     }
 
     load();
-  }, [slug, eventId]);
+  }, [slug, eventId, mode]);
 
-  async function handleSubmit(status: 'confirmado' | 'recusado') {
-    if (!slug && !eventId) return;
+  async function handleLegacySubmit(status: 'confirmado' | 'recusado') {
+    if (!slug) return;
     if (status === 'confirmado' && (!people || Number(people) < 1)) {
       setError('Informe quantas pessoas irão.');
       return;
     }
-    if (status === 'confirmado' && Number(people) > 10) {
-      setError('Você pode confirmar no máximo 10 pessoas.');
+    if (status === 'confirmado' && Number(people) > MAX_EVENT_ATTENDEES) {
+      setError(`Você pode confirmar no máximo ${MAX_EVENT_ATTENDEES} pessoas.`);
       return;
     }
 
     setSubmitting(true);
     setError('');
 
-    const result = slug
-      ? await guestService.submitResponse(slug, {
-          responsibleName: name,
-          confirmedPeople: Number(people),
-          status,
-        })
-      : await guestService.submitOpenEventResponse(eventId!, {
-          responsibleName: name,
-          confirmedPeople: Number(people),
-          status,
-        });
+    const result = await guestService.submitResponse(slug, {
+      responsibleName: contactName,
+      confirmedPeople: Number(people),
+      status,
+    });
+
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.error ?? 'Ocorreu um erro. Tente novamente.');
+      return;
+    }
+
+    setGuest(result.guest ?? null);
+    setConfirmed(status);
+    setScreen('success');
+  }
+
+  async function handleEventSubmit(status: 'confirmado' | 'recusado') {
+    if (!eventId) return;
+    const normalizedAttendees = normalizeEventAttendees(attendees);
+
+    if (status === 'confirmado') {
+      if (normalizedAttendees.length < 1) {
+        setError('Adicione pelo menos um nome para confirmar a presença.');
+        return;
+      }
+
+      if (normalizedAttendees.length > MAX_EVENT_ATTENDEES) {
+        setError(`Você pode confirmar no máximo ${MAX_EVENT_ATTENDEES} pessoas por convite.`);
+        return;
+      }
+
+      if (normalizedAttendees.some((attendee) => !attendee.name)) {
+        setError('Preencha o nome de todos os convidados antes de confirmar.');
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    setError('');
+
+    const result = await guestService.submitOpenEventResponse(eventId, {
+      attendees: status === 'confirmado' ? normalizedAttendees : [],
+      status,
+    });
 
     setSubmitting(false);
 
@@ -140,23 +208,33 @@ export default function PublicRsvpPage() {
             </h2>
             <p className="mb-8 text-sm leading-relaxed text-cream/60">
               {isConfirmed
-                ? `Que ótima notícia, ${guest?.responsibleName?.split(' ')[0] || name.split(' ')[0] || 'você'}! Estamos ansiosos para receber ${
-                    (guest?.confirmedPeople ?? Number(people)) === 1
-                      ? 'você'
-                      : `você e mais ${Math.max((guest?.confirmedPeople ?? Number(people)) - 1, 0)} pessoa(s)`
-                  }.`
-                : `Sentiremos sua falta, ${guest?.responsibleName?.split(' ')[0] || name?.split(' ')[0] || 'você'}. Obrigado por nos avisar!`}
+                ? 'Sua confirmação foi salva com sucesso. Em breve o organizador verá sua lista de convidados.'
+                : 'Sentiremos sua falta. Obrigado por nos avisar!'}
             </p>
 
-            {isConfirmed && (
+            {isConfirmed && guest?.attendees?.length ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-cream/70">
+                <p className="mb-2 text-xs uppercase tracking-[0.2em] text-cream/40">Convidados confirmados</p>
+                <ul className="space-y-1.5">
+                  {guest.attendees.map((attendee) => (
+                    <li key={`${attendee.name}-${attendee.type}`} className="flex items-center justify-between gap-3">
+                      <span>{attendee.name}</span>
+                      <span className="text-xs text-cream/45">{attendeeTypeLabel(attendee.type)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {isConfirmed && mode === 'event' && (
               <button
                 onClick={() => {
                   setScreen('form');
                   setError('');
                 }}
-                className="text-xs text-cream/40 underline underline-offset-2 transition-colors hover:text-cream/60"
+                className="mt-6 text-xs text-cream/40 underline underline-offset-2 transition-colors hover:text-cream/60"
               >
-                Precisa alterar a quantidade de pessoas? Clique aqui.
+                Precisa alterar a lista? Clique aqui.
               </button>
             )}
           </div>
@@ -194,41 +272,136 @@ export default function PublicRsvpPage() {
               color: theme.textColor,
             }}
           >
-            <Field label="Seu nome">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Como preferir ser chamado(a)"
-                className="placeholder:text-cream/25"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderColor: theme.borderColor,
-                  color: theme.textColor,
-                }}
-              />
-            </Field>
+            {mode === 'legacy' ? (
+              <>
+                <Field label="Seu nome">
+                  <Input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    placeholder="Como preferir ser chamado(a)"
+                    className="placeholder:text-cream/25"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                      borderColor: theme.borderColor,
+                      color: theme.textColor,
+                    }}
+                  />
+                </Field>
 
-            <Field label="Quantas pessoas irão?" hint="Você pode confirmar de 1 até 10 pessoas, incluindo crianças.">
-              <Input
-                type="number"
-                min={1}
-                max={10}
-                value={people}
-                onChange={(e) => setPeople(e.target.value)}
-                className="placeholder:text-cream/25"
-                style={{
-                  backgroundColor: 'rgba(255,255,255,0.08)',
-                  borderColor: theme.borderColor,
-                  color: theme.textColor,
-                }}
-              />
-            </Field>
+                <Field label="Quantas pessoas irão?" hint="Você pode confirmar de 1 até 10 pessoas, incluindo crianças.">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={MAX_EVENT_ATTENDEES}
+                    value={people}
+                    onChange={(e) => setPeople(e.target.value)}
+                    className="placeholder:text-cream/25"
+                    style={{
+                      backgroundColor: 'rgba(255,255,255,0.08)',
+                      borderColor: theme.borderColor,
+                      color: theme.textColor,
+                    }}
+                  />
+                </Field>
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-2xl" style={{ color: theme.textColor }}>
+                      Quem vai comparecer?
+                    </h3>
+                    <p className="mt-1 text-sm" style={{ color: theme.mutedTextColor }}>
+                      Liste os nomes um por linha e marque se cada pessoa é adulto ou criança.
+                    </p>
+                  </div>
+                  <div className="rounded-full border px-3 py-1 text-xs font-medium" style={{ borderColor: theme.borderColor, color: theme.mutedTextColor }}>
+                    {normalizeEventAttendees(attendees).length}/{MAX_EVENT_ATTENDEES}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {attendees.map((attendee, index) => (
+                    <div key={attendee.id} className="grid gap-3 rounded-2xl border p-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]" style={{ borderColor: theme.borderColor }}>
+                      <Input
+                        value={attendee.name}
+                        onChange={(e) =>
+                          setAttendees((current) =>
+                            current.map((item) => (item.id === attendee.id ? { ...item, name: e.target.value } : item)),
+                          )
+                        }
+                        placeholder={`Nome ${index + 1}`}
+                        className="placeholder:text-cream/25"
+                        style={{
+                          backgroundColor: 'rgba(255,255,255,0.08)',
+                          borderColor: theme.borderColor,
+                          color: theme.textColor,
+                        }}
+                      />
+
+                      <select
+                        value={attendee.type}
+                        onChange={(e) =>
+                          setAttendees((current) =>
+                            current.map((item) =>
+                              item.id === attendee.id ? { ...item, type: e.target.value === 'child' ? 'child' : 'adult' } : item,
+                            ),
+                          )
+                        }
+                        className="h-12 rounded-xl border bg-transparent px-4 text-sm outline-none"
+                        style={{
+                          borderColor: theme.borderColor,
+                          color: theme.textColor,
+                          backgroundColor: 'rgba(255,255,255,0.08)',
+                        }}
+                      >
+                        <option value="adult">Adulto</option>
+                        <option value="child">Criança</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => setAttendees((current) => (current.length === 1 ? current : current.filter((item) => item.id !== attendee.id)))}
+                        className="inline-flex h-12 items-center justify-center rounded-xl border px-3 text-sm transition-colors hover:bg-rose/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ borderColor: theme.borderColor, color: theme.textColor }}
+                        disabled={attendees.length === 1}
+                        aria-label={`Remover ${attendee.name || `nome ${index + 1}`}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setAttendees((current) => {
+                        if (current.length >= MAX_EVENT_ATTENDEES) return current;
+                        return [...current, createAttendeeDraft()];
+                      })
+                    }
+                    className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm transition-colors hover:bg-ink/5"
+                    style={{ borderColor: theme.borderColor, color: theme.textColor }}
+                    disabled={normalizeEventAttendees(attendees).length >= MAX_EVENT_ATTENDEES}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar nome
+                  </button>
+                  <div className="inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm" style={{ borderColor: theme.borderColor, color: theme.mutedTextColor }}>
+                    <Users className="h-4 w-4" />
+                    Até {MAX_EVENT_ATTENDEES} pessoas
+                  </div>
+                </div>
+              </div>
+            )}
 
             {error && <p className="rounded-lg border border-rose/20 bg-rose/10 px-4 py-2.5 text-sm text-rose">{error}</p>}
 
             <div className="flex flex-col gap-3 pt-2">
               <button
-                onClick={() => handleSubmit('confirmado')}
+                onClick={() => (mode === 'legacy' ? handleLegacySubmit('confirmado') : handleEventSubmit('confirmado'))}
                 disabled={submitting}
                 className="w-full rounded-xl py-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ backgroundColor: theme.primaryColor, color: '#FFFFFF' }}
@@ -236,7 +409,7 @@ export default function PublicRsvpPage() {
                 {submitting ? 'Confirmando...' : event?.primaryActionLabel || 'Confirmar presença'}
               </button>
               <button
-                onClick={() => handleSubmit('recusado')}
+                onClick={() => (mode === 'legacy' ? handleLegacySubmit('recusado') : handleEventSubmit('recusado'))}
                 disabled={submitting}
                 className="w-full rounded-xl border py-3 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                 style={{

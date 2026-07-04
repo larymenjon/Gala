@@ -2,10 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { seedDemoData } from './seed'
+import { clearDemoData } from './seed'
 
-// Carrega dados de demonstração no primeiro acesso (sem backend configurado)
-seedDemoData()
+clearDemoData()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

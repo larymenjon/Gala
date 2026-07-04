@@ -13,6 +13,32 @@ function saveLocalEvents(events: EventItem[]): void {
   localDb.write(KEY, events);
 }
 
+async function syncLocalEventsToFirestore(ownerId?: string): Promise<void> {
+  const firestoreDb = db;
+  if (!firestoreDb || !ownerId) return;
+
+  const localEvents = getLocalEvents();
+  if (localEvents.length === 0) return;
+
+  const remoteSnapshot = await getDocs(query(collection(firestoreDb, KEY), where('ownerId', '==', ownerId)));
+  const remoteIds = new Set(remoteSnapshot.docs.map((snap) => snap.id));
+  const missingEvents = localEvents.filter((event) => !remoteIds.has(event.id));
+
+  if (missingEvents.length === 0) return;
+
+  await Promise.all(
+    missingEvents.map((event) =>
+      setDoc(
+        doc(firestoreDb, KEY, event.id),
+        stripUndefined({
+          ...event,
+          ownerId,
+        }),
+      ),
+    ),
+  );
+}
+
 function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as Partial<T>;
 }
@@ -55,16 +81,20 @@ export async function listEvents(): Promise<EventItem[]> {
 
   try {
     const ownerId = auth?.currentUser?.uid;
+    await syncLocalEventsToFirestore(ownerId);
     const firestoreQuery = ownerId
       ? query(collection(db, KEY), where('ownerId', '==', ownerId))
       : query(collection(db, KEY));
     const snapshot = await getDocs(firestoreQuery);
-    const events = snapshot.docs
+    const firestoreEvents = snapshot.docs
       .map((snap) => mapEventData(snap.id, snap.data()))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    if (events.length > 0) return events;
-    const localEvents = getLocalEvents().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return localDb.delay(localEvents);
+    const localEvents = getLocalEvents();
+    const remoteIds = new Set(firestoreEvents.map((event) => event.id));
+    const mergedEvents = [...firestoreEvents, ...localEvents.filter((event) => !remoteIds.has(event.id))].sort(
+      (a, b) => (a.createdAt < b.createdAt ? 1 : -1),
+    );
+    return mergedEvents;
   } catch {
     const events = getLocalEvents().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     return localDb.delay(events);
@@ -78,9 +108,13 @@ export async function getEvent(id: string): Promise<EventItem | undefined> {
   }
 
   try {
-    const snapshot = await getDoc(doc(db, KEY, id));
+    const firestoreDb = db;
+    const snapshot = await getDoc(doc(firestoreDb, KEY, id));
     if (!snapshot.exists()) {
       const localEvent = getLocalEvents().find((e) => e.id === id);
+      if (localEvent && auth?.currentUser?.uid && firestoreDb) {
+        await setDoc(doc(firestoreDb, KEY, localEvent.id), stripUndefined({ ...localEvent, ownerId: auth.currentUser.uid }));
+      }
       return localDb.delay(localEvent);
     }
     const event = mapEventData(snapshot.id, snapshot.data());

@@ -43,6 +43,7 @@ export default function GuestTable({ guests, onDelete }: { guests: Guest[]; onDe
             <thead>
               <tr className="text-left text-xs text-ink/40 uppercase tracking-wide border-y border-ink/8">
                 <th className="px-5 py-3 font-medium">Convidado</th>
+                <th className="px-5 py-3 font-medium">Participantes</th>
                 <th className="px-5 py-3 font-medium">Telefone</th>
                 <th className="px-5 py-3 font-medium">Previsto</th>
                 <th className="px-5 py-3 font-medium">Confirmado</th>
@@ -56,6 +57,22 @@ export default function GuestTable({ guests, onDelete }: { guests: Guest[]; onDe
               {filtered.map((g) => (
                 <tr key={g.id} className="border-b border-ink/5 last:border-0 hover:bg-ink/[0.02]">
                   <td className="px-5 py-3.5 font-medium text-ink">{g.responsibleName}</td>
+                  <td className="px-5 py-3.5 text-ink/65">
+                    {g.attendees?.length ? (
+                      <div className="space-y-1">
+                        {g.attendees.map((attendee) => (
+                          <div key={`${g.id}-${attendee.name}-${attendee.type}`} className="flex items-center gap-2">
+                            <span className="font-medium text-ink">{attendee.name}</span>
+                            <span className="rounded-full bg-ink/5 px-2 py-0.5 text-[11px] uppercase tracking-wide text-ink/50">
+                              {attendee.type === 'child' ? 'Criança' : 'Adulto'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-ink/40">—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5 text-ink/60">
                     <a
                       className="hover:text-ink underline decoration-ink/20 underline-offset-2"
@@ -67,7 +84,7 @@ export default function GuestTable({ guests, onDelete }: { guests: Guest[]; onDe
                     </a>
                   </td>
                   <td className="px-5 py-3.5 text-ink/60">{g.expectedPeople}</td>
-                  <td className="px-5 py-3.5 text-ink/60">{g.status === 'confirmado' ? g.confirmedPeople : '—'}</td>
+                  <td className="px-5 py-3.5 text-ink/60">{g.status === 'confirmado' ? g.confirmedPeople || g.attendees?.length || '—' : '—'}</td>
                   <td className="px-5 py-3.5"><StatusBadge status={g.status} /></td>
                   <td className="px-5 py-3.5 text-ink/45 text-xs">{formatDateTime(g.respondedAt)}</td>
                   <td className="px-5 py-3.5"><CopyLinkButton url={publicRsvpUrl(g.slug)} /></td>

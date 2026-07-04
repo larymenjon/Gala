@@ -14,7 +14,7 @@ service cloud.firestore {
 
     match /guests/{guestId} {
       allow read: if true;
-      allow create: if signedIn();
+      allow create: if true;
       allow update: if true;
       allow delete: if signedIn();
     }

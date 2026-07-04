@@ -7,6 +7,8 @@ import { generateSlug } from './utils/slug';
 import { isFirebaseConfigured } from './services/firebase';
 
 const NS = 'gala_system_v1';
+const DEMO_EVENT_ID = 'demo-event-001';
+const DEMO_GUEST_PREFIX = 'demo-guest-00';
 
 function stored(key: string) {
   return localStorage.getItem(`${NS}:${key}`);
@@ -50,4 +52,25 @@ export function seedDemoData() {
 
   localStorage.setItem(`${NS}:events`, JSON.stringify([event]));
   localStorage.setItem(`${NS}:guests`, JSON.stringify(guests));
+}
+
+export function clearDemoData() {
+  try {
+    const eventsRaw = localStorage.getItem(`${NS}:events`);
+    const guestsRaw = localStorage.getItem(`${NS}:guests`);
+
+    if (eventsRaw) {
+      const events = JSON.parse(eventsRaw) as EventItem[];
+      const filteredEvents = events.filter((event) => event.id !== DEMO_EVENT_ID);
+      localStorage.setItem(`${NS}:events`, JSON.stringify(filteredEvents));
+    }
+
+    if (guestsRaw) {
+      const guests = JSON.parse(guestsRaw) as Guest[];
+      const filteredGuests = guests.filter((guest) => guest.eventId !== DEMO_EVENT_ID && !guest.id.startsWith(DEMO_GUEST_PREFIX));
+      localStorage.setItem(`${NS}:guests`, JSON.stringify(filteredGuests));
+    }
+  } catch {
+    // Ignora erros de parse e deixa o app seguir normalmente.
+  }
 }
