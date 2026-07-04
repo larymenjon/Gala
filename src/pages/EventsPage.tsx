@@ -27,8 +27,7 @@ export default function EventsPage() {
     if (!toDelete) return;
     setDeleteError('');
     try {
-      const guests = await guestService.listGuestsByEvent(toDelete.id);
-      await Promise.allSettled(guests.map((g) => guestService.deleteGuest(g.id)));
+      await guestService.deleteGuestsByEvent(toDelete.id);
       await eventService.deleteEvent(toDelete.id);
       await refresh();
       setToDelete(null);

@@ -3,7 +3,7 @@ import type { EventMetrics, Guest, GuestStatus } from '../types';
 import { generateSlug } from '../utils/slug';
 import { auth, db } from './firebase';
 import { localDb } from './storage';
-import { getEvent } from './eventService';
+import { getEvent, listEvents } from './eventService';
 
 const KEY = 'guests';
 
@@ -94,21 +94,34 @@ export async function listGuestsByEvent(eventId: string): Promise<Guest[]> {
 
 export async function listAllGuests(): Promise<Guest[]> {
   if (!db) {
-    const guests = getLocalGuests().sort(compareGuestNames);
+    const events = await listEvents();
+    const eventIds = new Set(events.map((event) => event.id));
+    const guests = getLocalGuests()
+      .filter((guest) => eventIds.has(guest.eventId))
+      .sort(compareGuestNames);
     return localDb.delay(guests);
   }
 
   try {
     const snapshot = await getDocs(collection(db, KEY));
+    const events = await listEvents();
+    const eventIds = new Set(events.map((event) => event.id));
     if (snapshot.empty) {
-      const guests = getLocalGuests().sort(compareGuestNames);
+      const guests = getLocalGuests()
+        .filter((guest) => eventIds.has(guest.eventId))
+        .sort(compareGuestNames);
       return localDb.delay(guests);
     }
     return snapshot.docs
       .map((snap) => mapGuestData(snap.id, snap.data()))
+      .filter((guest) => eventIds.has(guest.eventId))
       .sort(compareGuestNames);
   } catch {
-    const guests = getLocalGuests().sort(compareGuestNames);
+    const events = await listEvents();
+    const eventIds = new Set(events.map((event) => event.id));
+    const guests = getLocalGuests()
+      .filter((guest) => eventIds.has(guest.eventId))
+      .sort(compareGuestNames);
     return localDb.delay(guests);
   }
 }
@@ -386,6 +399,34 @@ export async function deleteGuest(id: string): Promise<void> {
   }
 }
 
+export async function deleteGuestsByEvent(eventId: string): Promise<void> {
+  if (!db) {
+    const guests = getLocalGuests().filter((guest) => guest.eventId !== eventId);
+    saveLocalGuests(guests);
+    return localDb.delay(undefined);
+  }
+
+  try {
+    const snapshot = await getDocs(query(collection(db, KEY), where('eventId', '==', eventId)));
+    if (snapshot.empty) {
+      const guests = getLocalGuests().filter((guest) => guest.eventId !== eventId);
+      saveLocalGuests(guests);
+      return;
+    }
+
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((snap) => batch.delete(snap.ref));
+    await batch.commit();
+
+    const guests = getLocalGuests().filter((guest) => guest.eventId !== eventId);
+    saveLocalGuests(guests);
+  } catch {
+    const guests = getLocalGuests().filter((guest) => guest.eventId !== eventId);
+    saveLocalGuests(guests);
+    await localDb.delay(undefined);
+  }
+}
+
 export interface ResponseResult {
   ok: boolean;
   guest?: Guest;
@@ -403,6 +444,7 @@ export async function submitResponse(
   slug: string,
   payload: { responsibleName: string; confirmedPeople: number; status: Extract<GuestStatus, 'confirmado' | 'recusado'> }
 ): Promise<ResponseResult> {
+  const MAX_CONFIRM_PEOPLE = 10;
   const guests = await listAllGuests();
   const guest = guests.find((g) => g.slug === slug);
   if (!guest) {
@@ -415,8 +457,8 @@ export async function submitResponse(
     if (payload.confirmedPeople < 1) {
       return { ok: false, error: 'Informe ao menos 1 pessoa para confirmar presença.' };
     }
-    if (payload.confirmedPeople > guest.expectedPeople) {
-      return { ok: false, error: `Esse convite contempla no máximo ${guest.expectedPeople} pessoa(s).` };
+    if (payload.confirmedPeople > MAX_CONFIRM_PEOPLE) {
+      return { ok: false, error: `Você pode confirmar no máximo ${MAX_CONFIRM_PEOPLE} pessoa(s) por convite.` };
     }
     if (event?.maxGuestsTotal) {
       const othersConfirmed = guests

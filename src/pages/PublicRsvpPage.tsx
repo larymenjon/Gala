@@ -41,7 +41,8 @@ export default function PublicRsvpPage() {
       setGuest(g);
       setEvent(ev ?? null);
       setName(g.responsibleName);
-      setPeople(g.status === 'confirmado' ? String(g.confirmedPeople) : String(g.expectedPeople));
+      const initialPeople = g.status === 'confirmado' ? g.confirmedPeople : g.expectedPeople;
+      setPeople(String(Math.min(Math.max(initialPeople || 1, 1), 10)));
       setScreen(g.status !== 'pendente' ? 'success' : 'form');
       setConfirmed(g.status !== 'pendente' ? (g.status as 'confirmado' | 'recusado') : null);
     }
@@ -53,6 +54,10 @@ export default function PublicRsvpPage() {
     if (!slug) return;
     if (status === 'confirmado' && (!people || Number(people) < 1)) {
       setError('Informe quantas pessoas irão.');
+      return;
+    }
+    if (status === 'confirmado' && Number(people) > 10) {
+      setError('Você pode confirmar no máximo 10 pessoas.');
       return;
     }
 
@@ -179,11 +184,11 @@ export default function PublicRsvpPage() {
               />
             </Field>
 
-            <Field label="Quantas pessoas da sua casa irão?" hint={`Esse convite contempla até ${guest?.expectedPeople} pessoa(s).`}>
+            <Field label="Quantas pessoas irão?" hint="Você pode confirmar de 1 até 10 pessoas, incluindo crianças.">
               <Input
                 type="number"
                 min={1}
-                max={guest?.expectedPeople}
+                max={10}
                 value={people}
                 onChange={(e) => setPeople(e.target.value)}
                 className="placeholder:text-cream/25"
