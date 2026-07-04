@@ -30,28 +30,33 @@ export default function ImportPage() {
     }
 
     setLoading(true);
-    const parsed = await importService.parseGuestImportFile(file);
-    if (!parsed.ok) {
-      setLoading(false);
-      setErrors([parsed.error, ...(parsed.details ?? [])]);
-      return;
-    }
+    try {
+      const parsed = await importService.parseGuestImportFile(file);
+      if (!parsed.ok) {
+        setErrors([parsed.error, ...(parsed.details ?? [])]);
+        return;
+      }
 
-    const importResult = await guestService.importGuestsToEvent(selectedEvent.id, parsed.rows);
-    setLoading(false);
-    setResult(
-      `Importação concluída: ${importResult.imported} novos convidados adicionados, ${importResult.skippedDuplicates} duplicados ignorados e ${importResult.skippedInvalid} linhas inválidas descartadas.`
-    );
-    refresh();
+      const importResult = await guestService.importGuestsToEvent(selectedEvent.id, parsed.rows);
+      setResult(
+        `Importação concluída: ${importResult.imported} novos convidados adicionados, ${importResult.skippedDuplicates} duplicados ignorados e ${importResult.skippedInvalid} linhas inválidas descartadas.`
+      );
+      refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível processar o arquivo.';
+      setErrors([message]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function downloadTemplate() {
-    const csv = 'Nome,Telefone,Pessoas\nMaria Souza,(11) 91234-5678,2\nJoão Lima,(11) 98765-4321,4\n';
+    const csv = 'Maria Souza\nJoão Lima\n';
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'modelo-importacao-gala.csv';
+    a.download = 'modelo-importacao-gala.txt';
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -59,14 +64,14 @@ export default function ImportPage() {
   return (
     <AdminLayout
       title="Importar"
-      description="Envie uma planilha Excel ou CSV e preencha a lista automaticamente."
+      description="Envie uma lista de nomes em arquivo de texto ou planilha e preencha a lista automaticamente."
     >
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <section className="bg-white rounded-2xl border border-ink/8 shadow-soft p-6">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
               <h2 className="font-display text-xl font-medium">Importar Lista</h2>
-              <p className="text-sm text-ink/50 mt-1">Aceita arquivos .xlsx e .csv.</p>
+              <p className="text-sm text-ink/50 mt-1">Aceita arquivos com nomes em linhas separadas.</p>
             </div>
             <FileSpreadsheet className="h-6 w-6 text-gold-dark" />
           </div>
@@ -90,8 +95,8 @@ export default function ImportPage() {
 
             <div className="rounded-2xl border border-dashed border-ink/15 bg-ink/[0.02] p-6 text-center">
               <Upload className="h-8 w-8 mx-auto text-gold-dark" />
-              <p className="mt-3 font-medium text-ink">Escolha a planilha para importar</p>
-              <p className="text-sm text-ink/50 mt-1">Colunas obrigatórias: nome, telefone e pessoas.</p>
+              <p className="mt-3 font-medium text-ink">Escolha o arquivo para importar</p>
+              <p className="text-sm text-ink/50 mt-1">Pode ser .txt, .csv, .xlsx, .xls e similares com um nome por linha.</p>
               <button
                 type="button"
                 className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-ink text-cream px-4 py-2.5 text-sm font-medium hover:bg-ink-light transition-colors"
@@ -102,7 +107,7 @@ export default function ImportPage() {
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xlsx,.csv"
+                accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.tsv,.txt,.md,.log"
                 className="hidden"
                 onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
               />
@@ -112,7 +117,7 @@ export default function ImportPage() {
             {loading && (
               <div className="flex items-center gap-2 rounded-xl bg-gold/10 px-4 py-3 text-sm text-gold-dark">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Processando planilha...
+                Processando arquivo...
               </div>
             )}
 
@@ -151,18 +156,18 @@ export default function ImportPage() {
             <h3 className="font-display text-lg font-medium mb-3">Como a importação funciona</h3>
             <ol className="space-y-3 text-sm text-ink/60">
               <li>1. Selecione a lista de destino.</li>
-              <li>2. Envie um arquivo .xlsx ou .csv.</li>
-              <li>3. O sistema valida os campos obrigatórios.</li>
-              <li>4. Registros duplicados são ignorados automaticamente.</li>
+              <li>2. Envie um arquivo com os nomes em linhas separadas.</li>
+              <li>3. O sistema lê cada linha como um convidado.</li>
+              <li>4. Linhas vazias e títulos como "Nome" são ignorados.</li>
             </ol>
           </div>
 
           <div className="bg-white rounded-2xl border border-ink/8 shadow-soft p-5">
             <h3 className="font-display text-lg font-medium mb-3">Estrutura esperada</h3>
             <div className="rounded-xl bg-ink/[0.03] p-4 text-sm text-ink/70 space-y-2">
-              <p><strong>Nome</strong> ou <strong>Responsável</strong></p>
-              <p><strong>Telefone</strong> ou <strong>WhatsApp</strong></p>
-              <p><strong>Pessoas</strong> ou <strong>Quantidade</strong></p>
+              <p>Uma linha por convidado, por exemplo:</p>
+              <p><strong>Maria Souza</strong></p>
+              <p><strong>João Lima</strong></p>
             </div>
           </div>
         </aside>

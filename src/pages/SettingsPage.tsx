@@ -54,7 +54,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="space-y-3 text-sm text-ink/65">
-              <p>Listas cadastradas: <strong className="text-ink">{events.length}</strong></p>
+              <p>Eventos cadastrados: <strong className="text-ink">{events.length}</strong></p>
               <p>Conta ativa: <strong className="text-ink">{user?.email ?? '---'}</strong></p>
             </div>
           </div>

@@ -1,6 +1,6 @@
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, orderBy, query, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
 import type { EventItem } from '../types';
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import { localDb } from './storage';
 
 const KEY = 'events';
@@ -20,6 +20,7 @@ function stripUndefined<T extends Record<string, unknown>>(input: T): Partial<T>
 function mapEventData(id: string, data: Record<string, unknown>): EventItem {
   return {
     id,
+    ownerId: data.ownerId as string | undefined,
     name: String(data.name ?? ''),
     date: String(data.date ?? ''),
     time: String(data.time ?? ''),
@@ -53,8 +54,17 @@ export async function listEvents(): Promise<EventItem[]> {
   }
 
   try {
-    const snapshot = await getDocs(query(collection(db, KEY), orderBy('createdAt', 'desc')));
-    return snapshot.docs.map((snap) => mapEventData(snap.id, snap.data()));
+    const ownerId = auth?.currentUser?.uid;
+    const firestoreQuery = ownerId
+      ? query(collection(db, KEY), where('ownerId', '==', ownerId))
+      : query(collection(db, KEY));
+    const snapshot = await getDocs(firestoreQuery);
+    const events = snapshot.docs
+      .map((snap) => mapEventData(snap.id, snap.data()))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    if (events.length > 0) return events;
+    const localEvents = getLocalEvents().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return localDb.delay(localEvents);
   } catch {
     const events = getLocalEvents().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     return localDb.delay(events);
@@ -69,8 +79,12 @@ export async function getEvent(id: string): Promise<EventItem | undefined> {
 
   try {
     const snapshot = await getDoc(doc(db, KEY, id));
-    if (!snapshot.exists()) return undefined;
-    return mapEventData(snapshot.id, snapshot.data());
+    if (!snapshot.exists()) {
+      const localEvent = getLocalEvents().find((e) => e.id === id);
+      return localDb.delay(localEvent);
+    }
+    const event = mapEventData(snapshot.id, snapshot.data());
+    return event;
   } catch {
     const event = getLocalEvents().find((e) => e.id === id);
     return localDb.delay(event);
@@ -78,8 +92,10 @@ export async function getEvent(id: string): Promise<EventItem | undefined> {
 }
 
 export async function createEvent(input: Omit<EventItem, 'id' | 'createdAt'>): Promise<EventItem> {
+  const ownerId = auth?.currentUser?.uid;
   const event: EventItem = {
     ...input,
+    ownerId,
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
   };
@@ -92,10 +108,20 @@ export async function createEvent(input: Omit<EventItem, 'id' | 'createdAt'>): P
   }
 
   try {
+    if (!ownerId) {
+      const events = getLocalEvents();
+      events.push(event);
+      saveLocalEvents(events);
+      return localDb.delay(event);
+    }
     await setDoc(doc(db, KEY, event.id), stripUndefined({
       ...input,
+      ownerId,
       createdAt: event.createdAt,
     }));
+    const events = getLocalEvents();
+    events.push(event);
+    saveLocalEvents(events);
     return event;
   } catch {
     const events = getLocalEvents();
@@ -117,8 +143,10 @@ export async function updateEvent(id: string, patch: Partial<Omit<EventItem, 'id
 
   const ref = doc(db, KEY, id);
   try {
+    const ownerId = auth?.currentUser?.uid;
     const snapshot = await getDoc(ref);
     if (!snapshot.exists()) return undefined;
+    if (ownerId && snapshot.data()?.ownerId && snapshot.data().ownerId !== ownerId) return undefined;
 
     const normalizedPatch = Object.fromEntries(
       Object.entries(patch).map(([key, value]) => [key, value === undefined ? deleteField() : value]),
@@ -126,7 +154,14 @@ export async function updateEvent(id: string, patch: Partial<Omit<EventItem, 'id
     await updateDoc(ref, normalizedPatch);
     const updated = await getDoc(ref);
     if (!updated.exists()) return undefined;
-    return mapEventData(updated.id, updated.data());
+    const mapped = mapEventData(updated.id, updated.data());
+    const events = getLocalEvents();
+    const idx = events.findIndex((e) => e.id === id);
+    if (idx !== -1) {
+      events[idx] = mapped;
+      saveLocalEvents(events);
+    }
+    return mapped;
   } catch {
     const events = getLocalEvents();
     const idx = events.findIndex((e) => e.id === id);
@@ -145,7 +180,13 @@ export async function deleteEvent(id: string): Promise<void> {
   }
 
   try {
-    await deleteDoc(doc(db, KEY, id));
+    const ref = doc(db, KEY, id);
+    const snapshot = await getDoc(ref);
+    const ownerId = auth?.currentUser?.uid;
+    if (snapshot.exists() && ownerId && snapshot.data()?.ownerId && snapshot.data().ownerId !== ownerId) return;
+    await deleteDoc(ref);
+    const events = getLocalEvents().filter((e) => e.id !== id);
+    saveLocalEvents(events);
   } catch {
     const events = getLocalEvents().filter((e) => e.id !== id);
     saveLocalEvents(events);

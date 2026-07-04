@@ -1,7 +1,7 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, limit, query, setDoc, updateDoc, where, writeBatch } from 'firebase/firestore';
 import type { EventMetrics, Guest, GuestStatus } from '../types';
 import { generateSlug } from '../utils/slug';
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import { localDb } from './storage';
 import { getEvent } from './eventService';
 
@@ -18,6 +18,12 @@ function normalizeText(value: string): string {
 
 function normalizePhone(value: string): string {
   return value.replace(/\D/g, '');
+}
+
+function compareGuestNames(a: Guest, b: Guest): number {
+  const byName = a.responsibleName.localeCompare(b.responsibleName, 'pt-BR', { sensitivity: 'base' });
+  if (byName !== 0) return byName;
+  return a.createdAt.localeCompare(b.createdAt);
 }
 
 function getLocalGuests(): Guest[] {
@@ -63,36 +69,46 @@ export async function listGuestsByEvent(eventId: string): Promise<Guest[]> {
   if (!db) {
     const guests = getLocalGuests()
       .filter((g) => g.eventId === eventId)
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      .sort(compareGuestNames);
     return localDb.delay(guests);
   }
 
   try {
     const snapshot = await getDocs(query(collection(db, KEY), where('eventId', '==', eventId)));
+    if (snapshot.empty) {
+      const guests = getLocalGuests()
+        .filter((g) => g.eventId === eventId)
+        .sort(compareGuestNames);
+      return localDb.delay(guests);
+    }
     return snapshot.docs
       .map((snap) => mapGuestData(snap.id, snap.data()))
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      .sort(compareGuestNames);
   } catch {
     const guests = getLocalGuests()
       .filter((g) => g.eventId === eventId)
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      .sort(compareGuestNames);
     return localDb.delay(guests);
   }
 }
 
 export async function listAllGuests(): Promise<Guest[]> {
   if (!db) {
-    const guests = getLocalGuests().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    const guests = getLocalGuests().sort(compareGuestNames);
     return localDb.delay(guests);
   }
 
   try {
     const snapshot = await getDocs(collection(db, KEY));
+    if (snapshot.empty) {
+      const guests = getLocalGuests().sort(compareGuestNames);
+      return localDb.delay(guests);
+    }
     return snapshot.docs
       .map((snap) => mapGuestData(snap.id, snap.data()))
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      .sort(compareGuestNames);
   } catch {
-    const guests = getLocalGuests().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    const guests = getLocalGuests().sort(compareGuestNames);
     return localDb.delay(guests);
   }
 }
@@ -105,7 +121,10 @@ export async function getGuestBySlug(slug: string): Promise<Guest | undefined> {
 
   try {
     const snapshot = await getDocs(query(collection(db, KEY), where('slug', '==', slug), limit(1)));
-    if (snapshot.empty) return undefined;
+    if (snapshot.empty) {
+      const guest = getLocalGuests().find((g) => g.slug === slug);
+      return localDb.delay(guest);
+    }
     const snap = snapshot.docs[0];
     return mapGuestData(snap.id, snap.data());
   } catch {
@@ -182,8 +201,8 @@ export async function createGuest(input: {
 
 export interface GuestImportRow {
   responsibleName: string;
-  phone: string;
-  expectedPeople: number;
+  phone?: string;
+  expectedPeople?: number;
 }
 
 export interface GuestImportResult {
@@ -195,7 +214,7 @@ export interface GuestImportResult {
 
 export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[]): Promise<GuestImportResult> {
   const existingGuests = await listGuestsByEvent(eventId);
-  const existingKeys = new Set(existingGuests.map((g) => `${normalizeText(g.responsibleName)}|${normalizePhone(g.phone)}`));
+  const existingKeys = new Set(existingGuests.map((g) => `${normalizeText(g.responsibleName)}|${normalizePhone(g.phone) || 'sem-telefone'}`));
   const batchKeys = new Set<string>();
   let imported = 0;
   let skippedDuplicates = 0;
@@ -205,11 +224,11 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
     const guests = getLocalGuests();
     for (const row of rows) {
       const name = row.responsibleName.trim();
-      const phone = row.phone.trim();
-      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople)));
-      const key = `${normalizeText(name)}|${normalizePhone(phone)}`;
+      const phone = row.phone?.trim() ?? '';
+      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople ?? 1)));
+      const key = `${normalizeText(name)}|${normalizePhone(phone) || 'sem-telefone'}`;
 
-      if (!name || !phone || Number.isNaN(expectedPeople) || expectedPeople < 1) {
+      if (!name || Number.isNaN(expectedPeople) || expectedPeople < 1) {
         skippedInvalid += 1;
         continue;
       }
@@ -246,11 +265,11 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
 
   for (const row of rows) {
     const name = row.responsibleName.trim();
-    const phone = row.phone.trim();
-    const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople)));
-    const key = `${normalizeText(name)}|${normalizePhone(phone)}`;
+    const phone = row.phone?.trim() ?? '';
+    const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople ?? 1)));
+    const key = `${normalizeText(name)}|${normalizePhone(phone) || 'sem-telefone'}`;
 
-    if (!name || !phone || Number.isNaN(expectedPeople) || expectedPeople < 1) {
+    if (!name || Number.isNaN(expectedPeople) || expectedPeople < 1) {
       skippedInvalid += 1;
       continue;
     }
@@ -291,11 +310,11 @@ export async function importGuestsToEvent(eventId: string, rows: GuestImportRow[
     const guests = getLocalGuests();
     for (const row of rows) {
       const name = row.responsibleName.trim();
-      const phone = row.phone.trim();
-      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople)));
-      const key = `${normalizeText(name)}|${normalizePhone(phone)}`;
+      const phone = row.phone?.trim() ?? '';
+      const expectedPeople = Math.max(1, Math.floor(Number(row.expectedPeople ?? 1)));
+      const key = `${normalizeText(name)}|${normalizePhone(phone) || 'sem-telefone'}`;
 
-      if (!name || !phone || Number.isNaN(expectedPeople) || expectedPeople < 1) {
+      if (!name || Number.isNaN(expectedPeople) || expectedPeople < 1) {
         continue;
       }
 
@@ -349,7 +368,22 @@ export async function deleteGuest(id: string): Promise<void> {
     return localDb.delay(undefined);
   }
 
-  await deleteDoc(doc(db, KEY, id));
+  try {
+    const ref = doc(db, KEY, id);
+    const snapshot = await getDoc(ref);
+    const ownerId = auth?.currentUser?.uid;
+    if (snapshot.exists() && ownerId && snapshot.data()?.ownerId && snapshot.data().ownerId !== ownerId) {
+      return;
+    }
+
+    await deleteDoc(ref);
+    const guests = getLocalGuests().filter((g) => g.id !== id);
+    saveLocalGuests(guests);
+  } catch {
+    const guests = getLocalGuests().filter((g) => g.id !== id);
+    saveLocalGuests(guests);
+    await localDb.delay(undefined);
+  }
 }
 
 export interface ResponseResult {

@@ -12,6 +12,7 @@ export type EventCoverIcon =
 
 export interface EventItem {
   id: string;
+  ownerId?: string;
   name: string;
   date: string; // ISO date (yyyy-mm-dd)
   time: string; // HH:mm

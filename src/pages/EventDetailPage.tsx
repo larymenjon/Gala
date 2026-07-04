@@ -8,6 +8,7 @@ import GuestTable from '../components/GuestTable';
 import GuestFormModal from '../components/GuestFormModal';
 import EventFormModal from '../components/EventFormModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import CopyLinkButton from '../components/CopyLinkButton';
 import { useEventDetail } from '../hooks/useEventDetail';
 import type { EventItem, Guest } from '../types';
 import * as eventService from '../services/eventService';
@@ -15,6 +16,7 @@ import * as guestService from '../services/guestService';
 import { exportGuestsToCsv, exportGuestsToPdf } from '../utils/exporters';
 import { formatDate } from '../utils/format';
 import { getEventIcon } from '../utils/eventIcons';
+import { publicRsvpUrl } from '../utils/slug';
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +24,8 @@ export default function EventDetailPage() {
   const [showAddGuest, setShowAddGuest] = useState(false);
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [toDelete, setToDelete] = useState<Guest | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const shareUrl = guests[0] ? publicRsvpUrl(guests[0].slug) : '';
 
   async function handleAddGuest(data: { responsibleName: string; phone: string; expectedPeople: number }) {
     if (!id) return;
@@ -37,8 +41,14 @@ export default function EventDetailPage() {
 
   async function handleDeleteGuest() {
     if (!toDelete) return;
-    await guestService.deleteGuest(toDelete.id);
-    refresh();
+    setDeleteError('');
+    try {
+      await guestService.deleteGuest(toDelete.id);
+      setToDelete(null);
+      await refresh();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Não foi possível remover o convidado.');
+    }
   }
 
   if (loading) {
@@ -82,7 +92,18 @@ export default function EventDetailPage() {
             </span>
           )}
         </div>
-        <Button variant="secondary" size="sm" onClick={() => setShowEditEvent(true)}>Editar evento</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {shareUrl && (
+            <div className="flex items-center gap-2 rounded-xl border border-ink/10 bg-ink/[0.02] px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-[0.22em] text-ink/40">Link de confirmação</p>
+                <p className="max-w-[240px] truncate text-xs text-ink/65">{shareUrl}</p>
+              </div>
+              <CopyLinkButton url={shareUrl} label="Copiar" />
+            </div>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setShowEditEvent(true)}>Editar evento</Button>
+        </div>
       </div>
 
       {/* Metrics */}
@@ -127,12 +148,20 @@ export default function EventDetailPage() {
       <ConfirmDialog
         open={!!toDelete}
         title="Remover convidado"
-        message={`Tem certeza que deseja remover "${toDelete?.responsibleName}" da lista? Esta ação não pode ser desfeita.`}
+        message={`Tem certeza que deseja remover "${toDelete?.responsibleName}" do evento? Esta ação não pode ser desfeita.`}
         confirmLabel="Remover"
         danger
         onConfirm={handleDeleteGuest}
-        onClose={() => setToDelete(null)}
+        onClose={() => {
+          setToDelete(null);
+          setDeleteError('');
+        }}
       />
+      {deleteError && (
+        <div className="fixed bottom-4 right-4 max-w-sm rounded-xl border border-rose/20 bg-white px-4 py-3 text-sm text-rose shadow-card">
+          {deleteError}
+        </div>
+      )}
     </AdminLayout>
   );
 }

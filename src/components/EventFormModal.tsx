@@ -245,8 +245,8 @@ export default function EventFormModal({
           </div>
 
           <Field
-            label="Imagem do convite"
-            hint="Envie a arte do convite para aparecer na página do convidado."
+            label="Arte do convite (A5)"
+            hint="Envie a arte do convite para aparecer como capa principal na página do convidado."
             error={errors.invitationArtworkUrl}
           >
             <div className="rounded-2xl border border-dashed border-ink/15 bg-ink/[0.02] p-4">
@@ -255,7 +255,7 @@ export default function EventFormModal({
                   <img
                     src={form.invitationArtworkUrl}
                     alt="Prévia da imagem do convite"
-                    className="h-56 w-full rounded-2xl object-cover"
+                    className="aspect-[210/297] w-full rounded-2xl object-contain bg-black/5"
                   />
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -273,7 +273,7 @@ export default function EventFormModal({
               ) : (
                 <div className="text-center">
                   <p className="text-sm font-medium text-ink">Adicione uma imagem do convite</p>
-                  <p className="mt-1 text-xs text-ink/50">PNG, JPG ou WEBP com até 2,5 MB.</p>
+                  <p className="mt-1 text-xs text-ink/50">PNG, JPG ou WEBP em formato vertical, preferencialmente A5, com até 2,5 MB.</p>
                   <div className="mt-4 flex justify-center">
                     <Button variant="secondary" size="sm" onClick={() => document.getElementById('gala-invitation-upload')?.click()}>
                       Enviar imagem
@@ -387,7 +387,7 @@ export default function EventFormModal({
             >
               {form.invitationArtworkUrl && (
                 <div className="mb-5 overflow-hidden rounded-[20px] border" style={{ borderColor: form.borderColor || theme.borderColor }}>
-                  <img src={form.invitationArtworkUrl} alt="Prévia da arte do convite" className="h-56 w-full object-cover" />
+                  <img src={form.invitationArtworkUrl} alt="Prévia da arte do convite" className="aspect-[210/297] w-full object-contain bg-black/5" />
                 </div>
               )}
 

@@ -15,7 +15,7 @@ export default function ConfirmDialog({
   message: string;
   confirmLabel?: string;
   danger?: boolean;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }) {
   return (
@@ -23,7 +23,7 @@ export default function ConfirmDialog({
       <p className="text-sm text-ink/70 mb-6">{message}</p>
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant={danger ? 'danger' : 'primary'} onClick={() => { onConfirm(); onClose(); }}>
+        <Button variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>
           {confirmLabel}
         </Button>
       </div>

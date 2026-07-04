@@ -15,7 +15,7 @@ import BrandMark from './BrandMark';
 
 const NAV = [
   { to: '/admin/inicio', label: 'Início', icon: House },
-  { to: '/admin/listas', label: 'Listas', icon: ListChecks },
+  { to: '/admin/listas', label: 'Eventos', icon: ListChecks },
   { to: '/admin/importar', label: 'Importar', icon: Upload },
   { to: '/admin/relatorios', label: 'Relatórios', icon: BarChart3 },
   { to: '/admin/conta', label: 'Conta', icon: UserRound },

@@ -29,7 +29,7 @@ export default function ReportsPage() {
   return (
     <AdminLayout
       title="Relatórios"
-      description="Resumo consolidado das listas, convidados e respostas."
+      description="Resumo consolidado dos eventos, convidados e respostas."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-6">
         <ReportCard label="Convidados" value={allGuests.length} icon={Users} />
@@ -42,8 +42,8 @@ export default function ReportsPage() {
         <section className="bg-white rounded-2xl border border-ink/8 shadow-soft p-5">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
-              <h2 className="font-display text-lg font-medium">Listas e exportação</h2>
-              <p className="text-sm text-ink/50">Baixe cada lista em CSV ou PDF.</p>
+              <h2 className="font-display text-lg font-medium">Eventos e exportação</h2>
+              <p className="text-sm text-ink/50">Baixe cada evento em CSV ou PDF.</p>
             </div>
             <Download className="h-5 w-5 text-gold-dark" />
           </div>
@@ -60,7 +60,7 @@ export default function ReportsPage() {
                   subtitle={`${formatDateShort(event.date)} · ${event.time}`}
                 />
               ))}
-              {events.length === 0 && <p className="py-10 text-center text-sm text-ink/40">Nenhuma lista cadastrada.</p>}
+              {events.length === 0 && <p className="py-10 text-center text-sm text-ink/40">Nenhum evento cadastrado.</p>}
             </div>
           )}
         </section>
@@ -70,7 +70,7 @@ export default function ReportsPage() {
           <div className="space-y-3 text-sm text-ink/60">
             <p>Total de recusas: <strong className="text-ink">{declined.length}</strong></p>
             <p>Confirmados + pendentes mostram o andamento geral da operação.</p>
-            <p>Use o menu de listas para incluir novos convidados ou abrir uma lista específica.</p>
+            <p>Use o menu de eventos para incluir novos convidados ou abrir um evento específico.</p>
           </div>
         </section>
       </div>

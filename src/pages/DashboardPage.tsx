@@ -56,7 +56,7 @@ export default function DashboardPage() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-cream shadow-soft transition-colors hover:bg-ink-light"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            Importar lista
+            Importar evento
           </Link>
         </div>
       )}
@@ -66,7 +66,7 @@ export default function DashboardPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard label="Listas ativas" value={events.length} icon={ListChecks} />
+            <SummaryCard label="Eventos ativos" value={events.length} icon={ListChecks} />
             <SummaryCard label="Convidados" value={guestCount} icon={Users} />
             <SummaryCard label="Confirmados" value={confirmedCount} icon={CalendarDays} />
             <SummaryCard label="Pendentes" value={pendingCount} icon={Clock3} />
@@ -84,7 +84,7 @@ export default function DashboardPage() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <QuickAction onClick={() => setShowCreate(true)} title="Criar convite" desc="Personalizar e publicar um novo convite" />
-                <QuickAction to="/admin/listas" title="Gerenciar listas" desc="Abrir eventos e convidados" />
+                <QuickAction to="/admin/listas" title="Gerenciar eventos" desc="Abrir eventos e convidados" />
                 <QuickAction to="/admin/importar" title="Importar planilha" desc="Adicionar convidados em lote" />
                 <QuickAction to="/admin/relatorios" title="Ver relatórios" desc="Acompanhar métricas gerais" />
                 <QuickAction to="/admin/conta" title="Minha conta" desc="Dados pessoais e segurança" />
@@ -94,7 +94,7 @@ export default function DashboardPage() {
             <section className="rounded-2xl border border-ink/8 bg-white p-5 shadow-soft">
               <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
-                  <h2 className="font-display text-lg font-medium">Listas recentes</h2>
+                  <h2 className="font-display text-lg font-medium">Eventos recentes</h2>
                   <p className="text-sm text-ink/50">Os últimos eventos criados.</p>
                 </div>
                 <CalendarDays className="h-5 w-5 text-gold-dark" />
@@ -102,7 +102,7 @@ export default function DashboardPage() {
 
               <div className="space-y-3">
                 {recentEvents.length === 0 ? (
-                  <p className="py-6 text-sm text-ink/45">Ainda não há listas cadastradas.</p>
+                  <p className="py-6 text-sm text-ink/45">Ainda não há eventos cadastrados.</p>
                 ) : (
                   recentEvents.map((event) => (
                     <Link

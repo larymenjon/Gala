@@ -16,6 +16,7 @@ export default function EventsPage() {
   const { events, loading, refresh } = useEvents();
   const [showCreate, setShowCreate] = useState(false);
   const [toDelete, setToDelete] = useState<EventItem | null>(null);
+  const [deleteError, setDeleteError] = useState('');
 
   async function handleCreate(data: Omit<EventItem, 'id' | 'createdAt'>) {
     await eventService.createEvent(data);
@@ -24,31 +25,37 @@ export default function EventsPage() {
 
   async function handleDelete() {
     if (!toDelete) return;
-    const guests = await guestService.listGuestsByEvent(toDelete.id);
-    await Promise.all(guests.map((g) => guestService.deleteGuest(g.id)));
-    await eventService.deleteEvent(toDelete.id);
-    refresh();
+    setDeleteError('');
+    try {
+      const guests = await guestService.listGuestsByEvent(toDelete.id);
+      await Promise.allSettled(guests.map((g) => guestService.deleteGuest(g.id)));
+      await eventService.deleteEvent(toDelete.id);
+      await refresh();
+      setToDelete(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Não foi possível remover o evento.');
+    }
   }
 
   return (
     <AdminLayout
-      title="Listas"
-      description="Gerencie eventos e as listas de convidados ligadas a cada um deles."
-      actions={<Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Nova lista</Button>}
+      title="Eventos"
+      description="Gerencie eventos e os convidados ligados a cada um deles."
+      actions={<Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Novo evento</Button>}
     >
       <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-ink/50">{events.length} lista{events.length !== 1 ? 's' : ''} cadastrada{events.length !== 1 ? 's' : ''}</p>
-        <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Nova lista</Button>
+        <p className="text-sm text-ink/50">{events.length} evento{events.length !== 1 ? 's' : ''} cadastrado{events.length !== 1 ? 's' : ''}</p>
+        <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Novo evento</Button>
       </div>
 
       {loading ? (
-        <div className="py-20 text-center text-sm text-ink/40">Carregando listas...</div>
+        <div className="py-20 text-center text-sm text-ink/40">Carregando eventos...</div>
       ) : events.length === 0 ? (
         <div className="py-20 text-center max-w-lg mx-auto">
           <CalendarDays className="h-12 w-12 mx-auto text-ink/25 mb-4" />
-          <p className="font-display text-xl mb-2">Nenhuma lista ainda</p>
-          <p className="text-sm text-ink/50 mb-6">Crie sua primeira lista para começar a gerenciar confirmações de presença.</p>
-          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Criar primeira lista</Button>
+          <p className="font-display text-xl mb-2">Nenhum evento ainda</p>
+          <p className="text-sm text-ink/50 mb-6">Crie seu primeiro evento para começar a gerenciar confirmações de presença.</p>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setShowCreate(true)}>Criar primeiro evento</Button>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -61,13 +68,21 @@ export default function EventsPage() {
       <EventFormModal open={showCreate} onClose={() => setShowCreate(false)} onSubmit={handleCreate} />
       <ConfirmDialog
         open={!!toDelete}
-        title="Remover lista"
+        title="Remover evento"
         message={`Tem certeza que deseja remover "${toDelete?.name}"? Todos os convidados cadastrados também serão excluídos. Esta ação não pode ser desfeita.`}
         confirmLabel="Remover"
         danger
         onConfirm={handleDelete}
-        onClose={() => setToDelete(null)}
+        onClose={() => {
+          setToDelete(null);
+          setDeleteError('');
+        }}
       />
+      {deleteError && (
+        <div className="fixed bottom-4 right-4 max-w-sm rounded-xl border border-rose/20 bg-white px-4 py-3 text-sm text-rose shadow-card">
+          {deleteError}
+        </div>
+      )}
     </AdminLayout>
   );
 }
