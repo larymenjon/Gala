@@ -9,8 +9,10 @@ import {
   LogOut,
   UserRound,
   Upload,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { isFirebaseConfigured } from '../services/firebase';
 import BrandMark from './BrandMark';
 
 const NAV = [
@@ -91,6 +93,16 @@ export default function AdminLayout({
       </aside>
 
       <div className="flex-1 min-w-0">
+        {!isFirebaseConfigured && (
+          <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="mx-auto flex max-w-7xl items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <p>
+                O Firebase não está configurado neste ambiente. Os convites criados aqui ficam só no navegador e não vão abrir para outras pessoas.
+              </p>
+            </div>
+          </div>
+        )}
         <header className="sticky top-0 z-20 border-b border-ink/8 bg-white/95 backdrop-blur-sm">
           <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-start justify-between gap-4">
             <div className="min-w-0">

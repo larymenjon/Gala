@@ -141,18 +141,19 @@ export async function createEvent(input: Omit<EventItem, 'id' | 'createdAt'>): P
     return localDb.delay(event);
   }
 
+  if (!ownerId) {
+    throw new Error('Você precisa entrar na conta antes de criar um convite. Sem autenticação, o convite fica apenas no navegador.');
+  }
+
   try {
-    if (!ownerId) {
-      const events = getLocalEvents();
-      events.push(event);
-      saveLocalEvents(events);
-      return localDb.delay(event);
-    }
-    await setDoc(doc(db, KEY, event.id), stripUndefined({
-      ...input,
-      ownerId,
-      createdAt: event.createdAt,
-    }));
+    await setDoc(
+      doc(db, KEY, event.id),
+      stripUndefined({
+        ...input,
+        ownerId,
+        createdAt: event.createdAt,
+      }),
+    );
     const events = getLocalEvents();
     events.push(event);
     saveLocalEvents(events);

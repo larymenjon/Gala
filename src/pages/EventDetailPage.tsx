@@ -14,7 +14,7 @@ import type { EventItem, Guest } from '../types';
 import * as eventService from '../services/eventService';
 import * as guestService from '../services/guestService';
 import { exportGuestsToCsv, exportGuestsToPdf } from '../utils/exporters';
-import { formatDate } from '../utils/format';
+import { formatCountdownLabel, formatDate } from '../utils/format';
 import { getEventIcon } from '../utils/eventIcons';
 import { publicEventUrl } from '../utils/slug';
 
@@ -26,6 +26,7 @@ export default function EventDetailPage() {
   const [toDelete, setToDelete] = useState<Guest | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const shareUrl = event ? publicEventUrl(event.id) : '';
+  const countdownLabel = formatCountdownLabel(event?.date);
 
   async function handleAddGuest(data: { responsibleName: string; phone: string; expectedPeople: number }) {
     if (!id) return;
@@ -86,6 +87,11 @@ export default function EventDetailPage() {
             <p className="text-sm text-ink/50">{formatDate(event.date)} às {event.time}</p>
             <p className="text-sm text-ink/70">{event.location}</p>
           </div>
+          {countdownLabel && (
+            <span className="text-xs bg-amber-50 text-amber-900 font-medium px-2.5 py-1 rounded-full border border-amber-200">
+              {countdownLabel}
+            </span>
+          )}
           {event.maxGuestsTotal && (
             <span className="text-xs bg-gold/10 text-gold-dark font-medium px-2.5 py-1 rounded-full">
               Limite: {event.maxGuestsTotal} pessoas

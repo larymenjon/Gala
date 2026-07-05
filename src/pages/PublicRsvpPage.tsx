@@ -4,7 +4,7 @@ import { CalendarDays, Clock3, MailX, MapPin, PartyPopper, Plus, SearchX, Trash2
 import type { EventItem, Guest, GuestAttendee, GuestAttendeeType } from '../types';
 import * as guestService from '../services/guestService';
 import * as eventService from '../services/eventService';
-import { formatDate } from '../utils/format';
+import { formatCountdownLabel, formatDate, getDaysUntilDate } from '../utils/format';
 import { Field, Input } from '../components/FormFields';
 import BrandMark from '../components/BrandMark';
 import { getEventIcon } from '../utils/eventIcons';
@@ -431,6 +431,9 @@ export default function PublicRsvpPage() {
 function InvitationHero({ event, compact = false }: { event?: EventItem; compact?: boolean }) {
   const theme = getInvitationTheme(event?.invitationStyle);
   const hasArtwork = Boolean(event?.invitationArtworkUrl);
+  const countdownLabel = formatCountdownLabel(event?.date);
+  const countdownDays = getDaysUntilDate(event?.date);
+  const countdownHasNumber = countdownDays != null && countdownDays >= 0;
 
   return (
     <section
@@ -459,6 +462,33 @@ function InvitationHero({ event, compact = false }: { event?: EventItem; compact
               <p className="mt-2 text-sm leading-relaxed" style={{ color: theme.mutedTextColor }}>
                 {formatDate(event.date)} • {event.time} • {event.location}
               </p>
+            )}
+            {countdownLabel && countdownHasNumber && (
+              <div className="relative mt-5 flex justify-center">
+                <div className="absolute inset-x-8 top-7 h-28 rounded-full blur-3xl" style={{ backgroundColor: `${theme.secondaryColor}18` }} />
+                <div
+                  className="relative flex h-44 w-44 flex-col items-center justify-center rounded-full border shadow-[0_18px_45px_rgba(15,27,51,0.12)] sm:h-52 sm:w-52"
+                  style={{
+                    borderColor: theme.borderColor,
+                    background: `radial-gradient(circle at 30% 30%, ${theme.secondaryColor}18 0%, ${theme.cardBackgroundColor} 55%, ${theme.backgroundColor} 100%)`,
+                  }}
+                >
+                  <p className="text-[0.62rem] font-semibold uppercase tracking-[0.36em]" style={{ color: theme.secondaryColor }}>
+                    Grande dia
+                  </p>
+                  <div className="mt-3 flex items-end gap-2">
+                    <span className="font-display text-6xl leading-none sm:text-7xl" style={{ color: theme.textColor }}>
+                      {Math.max(countdownDays ?? 0, 0)}
+                    </span>
+                    <span className="pb-2 text-[0.72rem] font-semibold uppercase tracking-[0.26em]" style={{ color: theme.mutedTextColor }}>
+                      {countdownDays === 1 ? 'dia' : 'dias'}
+                    </span>
+                  </div>
+                  <p className="mt-3 max-w-[140px] text-center text-xs leading-relaxed" style={{ color: theme.mutedTextColor }}>
+                    {countdownLabel}
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -507,6 +537,34 @@ function InvitationHero({ event, compact = false }: { event?: EventItem; compact
               </p>
             </div>
           </div>
+
+          {countdownLabel && countdownHasNumber && (
+            <div className="relative flex justify-center py-2">
+              <div className="absolute inset-x-10 top-6 h-32 rounded-full blur-3xl" style={{ backgroundColor: `${theme.secondaryColor}18` }} />
+              <div
+                className="relative flex h-52 w-52 flex-col items-center justify-center rounded-full border shadow-[0_18px_45px_rgba(15,27,51,0.12)] sm:h-60 sm:w-60"
+                style={{
+                  borderColor: theme.borderColor,
+                  background: `radial-gradient(circle at 30% 30%, ${theme.secondaryColor}1E 0%, ${theme.cardBackgroundColor} 58%, ${theme.backgroundColor} 100%)`,
+                }}
+              >
+                <p className="text-[0.64rem] font-semibold uppercase tracking-[0.4em]" style={{ color: theme.secondaryColor }}>
+                  Contagem regressiva
+                </p>
+                <div className="mt-3 flex items-end gap-2">
+                  <span className="font-display text-7xl leading-none sm:text-8xl" style={{ color: theme.textColor }}>
+                    {Math.max(countdownDays ?? 0, 0)}
+                  </span>
+                  <span className="pb-3 text-[0.72rem] font-semibold uppercase tracking-[0.26em]" style={{ color: theme.mutedTextColor }}>
+                    {countdownDays === 1 ? 'dia' : 'dias'}
+                  </span>
+                </div>
+                <p className="mt-3 max-w-[160px] text-center text-sm leading-relaxed" style={{ color: theme.mutedTextColor }}>
+                  {countdownLabel}
+                </p>
+            </div>
+            </div>
+          )}
 
           {event?.welcomeMessage && (
             <p className="text-center text-sm leading-relaxed" style={{ color: theme.textColor }}>

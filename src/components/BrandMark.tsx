@@ -29,12 +29,8 @@ export default function BrandMark({
       />
       {showLabel && (
         <div className="leading-none">
-          <div className={`font-display text-[clamp(2rem,4vw,3.6rem)] tracking-tight ${labelClassName}`.trim()}>
-            Gala
-          </div>
-          <div className={`mt-2 text-[0.68rem] uppercase tracking-[0.34em] ${subtitleClassName}`.trim()}>
-            Confirmação de presença
-          </div>
+          <div className={`font-display text-[clamp(2rem,4vw,3.6rem)] tracking-tight ${labelClassName}`.trim()}>Gala</div>
+          <div className={`mt-2 text-[0.68rem] uppercase tracking-[0.34em] ${subtitleClassName}`.trim()}>Confirmação de presença</div>
         </div>
       )}
     </div>
